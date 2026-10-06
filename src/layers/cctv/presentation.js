@@ -93,6 +93,8 @@ export function createPresentation({
       active: isActive,
       feedType: camera.feedType,
       isVideo: parts.navigation.recordMatchesFeed(record, 'live'),
+      // A live stream that failed this session and fell back to its still.
+      liveFailed: !!record.liveFailed,
       sourceKind:
         health?.sourceKind ||
         camera.sourceKind ||

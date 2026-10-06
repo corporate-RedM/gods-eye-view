@@ -210,7 +210,7 @@ export function createLifecycle({
       if (layerState._records.length > 0) {
         // Projection runtime + first frame fetch are deferred to enable() so
         // initializing the catalog stays render-cheap.
-        layerState._activeCameraId = layerState._records[0].camera.id;
+        layerState._activeCameraId = parts.navigation.defaultCameraId();
       }
 
       // Task 5: if the prior batch lost init's bounded race, apply it post-hoc
@@ -362,7 +362,7 @@ export function createLifecycle({
         return Boolean(coverage && layerState._recordById.has(coverage[1]));
       });
       if (!layerState._activeCameraId && layerState._records.length) {
-        layerState._activeCameraId = layerState._records[0].camera.id;
+        layerState._activeCameraId = parts.navigation.defaultCameraId();
         layerState._autoHopSuspended = false;
       }
       const activeRecord = parts.selection.getActiveRecord();

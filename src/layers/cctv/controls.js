@@ -319,7 +319,7 @@ export function createControls({ state: layerState, services, parts, source }) {
      * @param {boolean} [options.focus] - If true, fly to the new camera.
      * @param {number} [options.durationSec] - Fly-to duration in seconds.
      * @param {string} [options.feed] - 'live' or 'snapshot' to step only between
-     *   cameras of that feed type (the panel's feed filter).
+     *   cameras of that feed type; defaults to the panel's feed filter.
      * @returns {string|null} The newly active camera ID, or null if catalog is empty
      *   or no camera matches the feed filter.
      */
@@ -329,13 +329,14 @@ export function createControls({ state: layerState, services, parts, source }) {
       const currentIdx = layerState._records.findIndex(
         (record) => record === current,
       );
-      const filtered = options.feed === 'live' || options.feed === 'snapshot';
+      const feed = options.feed ?? layerState._feedFilter;
+      const filtered = feed === 'live' || feed === 'snapshot';
       const nextIdx = filtered
         ? parts.navigation.cctvCycleMatchingIndex(
             layerState._records,
             currentIdx,
             step,
-            options.feed,
+            feed,
           )
         : parts.navigation.cctvCycleIndex(
             currentIdx,
@@ -357,17 +358,40 @@ export function createControls({ state: layerState, services, parts, source }) {
      * @param {boolean} [options.focus=true] Whether to fly after selection.
      * @param {number} [options.durationSec] - Fly-to duration in seconds.
      * @param {string} [options.feed] - 'live' or 'snapshot' to pick the nearest
-     *   camera of that feed type (the panel's feed filter).
+     *   camera of that feed type; defaults to the panel's feed filter.
      * @returns {string|null} The nearest camera ID, or null if none found.
      */
     focusNearest(options = {}) {
-      const nearest = parts.navigation.nearestCameraIdToViewer(options.feed);
+      const nearest = parts.navigation.nearestCameraIdToViewer(
+        options.feed ?? layerState._feedFilter,
+      );
       if (!nearest) return null;
       parts.selection.setActiveCamera(nearest);
       if (options.focus !== false) {
         parts.navigation.focusCamera(nearest, options.durationSec || 1.8);
       }
       return nearest;
+    },
+
+    /**
+     * Sets the panel's feed filter. Cameras outside it are hidden on the globe
+     * (the active camera stays visible), left out of coverage outlines and
+     * ambient cards, and skipped by NEAREST, PREV/NEXT, voice camera commands
+     * and AUTO HOP.
+     * @param {'all'|'live'|'snapshot'} feed Anything else means 'all'.
+     * @returns {'all'|'live'|'snapshot'} The filter now in effect.
+     */
+    setFeedFilter(feed) {
+      const next = feed === 'live' || feed === 'snapshot' ? feed : 'all';
+      if (next === layerState._feedFilter) return next;
+      layerState._feedFilter = next;
+      if (layerState._enabled && layerState._viewer) {
+        parts.rendering.refreshHorizonCulling();
+        parts.rendering.refreshCoverageStyles();
+        parts.cards.refreshAmbientCards();
+        layerState._viewer.scene?.requestRender?.();
+      }
+      return next;
     },
   };
 

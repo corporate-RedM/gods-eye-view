@@ -38,3 +38,37 @@ test('second surface uses shared decoder, caps draws, clears switch and cancels 
   assert.equal(cancelled, 1);
   assert.equal(draws, 2);
 });
+
+test('a raised width cap (maximized feed) paints at full source resolution', () => {
+  let callback;
+  let cap = 640;
+  const canvas = {
+    width: 1,
+    height: 1,
+    getContext: () => ({ drawImage() {}, clearRect() {} }),
+  };
+  const video = {
+    readyState: 2,
+    videoWidth: 1280,
+    videoHeight: 720,
+    currentTime: 1,
+  };
+  createCctvVideoSurface(canvas, () => video, {
+    requestFrame: (fn) => {
+      callback = fn;
+      return 1;
+    },
+    cancelFrame() {},
+    maxWidth: () => cap,
+  });
+  callback(0);
+  assert.deepEqual([canvas.width, canvas.height], [640, 360]);
+  cap = 1920;
+  video.currentTime = 2;
+  callback(100);
+  assert.deepEqual(
+    [canvas.width, canvas.height],
+    [1280, 720],
+    'never wider than the source',
+  );
+});

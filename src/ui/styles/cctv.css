@@ -416,6 +416,13 @@
   background: rgba(255, 72, 72, 0.11);
 }
 
+/* A live stream that failed this session; the still image is showing. */
+#cctv-source-badge[data-frame-state='offline'] {
+  color: #ffcf8a;
+  border-color: rgba(255, 159, 67, 0.55);
+  background: rgba(255, 140, 40, 0.12);
+}
+
 .cctv-summary-label {
   font-family: var(--font-mono);
   font-size: 8px;

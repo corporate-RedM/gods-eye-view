@@ -244,6 +244,102 @@ export const DELDOT_ANCHORS = [
   { lat: 39.1582, lon: -75.5244 }, // Dover (Kent)
   { lat: 38.6906, lon: -75.3877 }, // Georgetown (Sussex)
 ];
+/**
+ * State "511" traveler sites on the Castle Rock platform that publish open
+ * (token-free) live-video links. DataTables sites list cameras at
+ * `/List/GetData/Cameras` (at most 100 rows per page); GraphQL sites through
+ * `POST /api/graphql` (MapFeatures over the state's bounding box). Only
+ * cameras with an open HLS link are loaded, each keeping its still image as
+ * the fallback. Stream and snapshot links are pinned to the listed host
+ * suffixes. Verified keyless and playing on 2026-10-06; Florida, Pennsylvania,
+ * North Carolina, Kansas and Massachusetts token-lock their video and New
+ * York and Colorado moved off these endpoints, so they are not listed.
+ */
+export const CASTLE_ROCK_511_SITES = Object.freeze([
+  {
+    id: 'us-wi',
+    pack: 'wisconsin511',
+    envKey: 'WISCONSIN',
+    state: 'Wisconsin',
+    provider: '511 Wisconsin (WisDOT)',
+    origin: 'https://511wi.gov',
+    api: 'datatables',
+    // Three border cameras stream from Iowa DOT's servers.
+    streamHosts: ['dot.wi.gov', 'iowadot.gov'],
+    groundElevationM: 280,
+    anchors: [
+      { lat: 43.0389, lon: -87.9065 }, // Milwaukee
+      { lat: 43.0731, lon: -89.4012 }, // Madison
+    ],
+  },
+  {
+    id: 'us-la',
+    pack: 'louisiana511',
+    envKey: 'LOUISIANA',
+    state: 'Louisiana',
+    provider: '511 Louisiana (LA DOTD)',
+    origin: 'https://511la.org',
+    api: 'datatables',
+    streamHosts: ['dotd.la.gov'],
+    groundElevationM: 10,
+    anchors: [
+      { lat: 29.9511, lon: -90.0715 }, // New Orleans
+      { lat: 30.4515, lon: -91.1871 }, // Baton Rouge
+    ],
+  },
+  {
+    id: 'us-nv',
+    pack: 'nevada511',
+    envKey: 'NEVADA',
+    state: 'Nevada',
+    provider: 'NVroads (NDOT)',
+    // nvroads.com answers 301 to www; loaders refuse redirects.
+    origin: 'https://www.nvroads.com',
+    api: 'datatables',
+    streamHosts: ['its.nv.gov'],
+    groundElevationM: 900,
+    anchors: [
+      { lat: 36.1699, lon: -115.1398 }, // Las Vegas
+      { lat: 39.5296, lon: -119.8138 }, // Reno
+    ],
+  },
+  {
+    id: 'us-mn',
+    pack: 'minnesota511',
+    envKey: 'MINNESOTA',
+    state: 'Minnesota',
+    provider: '511 Minnesota (MnDOT)',
+    origin: 'https://511mn.org',
+    api: 'graphql',
+    bbox: { north: 49.5, south: 43.4, east: -89.4, west: -97.3 },
+    streamHosts: ['dot.state.mn.us'],
+    snapshotHosts: ['carsprogram.org'],
+    groundElevationM: 280,
+    anchors: [
+      { lat: 44.9778, lon: -93.265 }, // Minneapolis
+      { lat: 46.7867, lon: -92.1005 }, // Duluth
+    ],
+  },
+  {
+    id: 'us-ia',
+    pack: 'iowa511',
+    envKey: 'IOWA',
+    state: 'Iowa',
+    provider: '511 Iowa (Iowa DOT)',
+    origin: 'https://www.511ia.org',
+    api: 'graphql',
+    bbox: { north: 43.6, south: 40.3, east: -90.1, west: -96.7 },
+    streamHosts: ['iowadot.gov'],
+    snapshotHosts: ['iowadot.gov'],
+    groundElevationM: 300,
+    anchors: [
+      { lat: 41.5868, lon: -93.625 }, // Des Moines
+      { lat: 41.9779, lon: -91.6656 }, // Cedar Rapids
+    ],
+  },
+]);
+/** Per-state cap; every listed state is under it today. */
+export const DEFAULT_CASTLE_ROCK_511_MAX_SOURCES = 2000;
 /** Camera CATALOGS change rarely; 15 min keeps multi-megabyte upstream list refetches (Austin rows.json + 4 Caltrans districts + TfL + Ontario 511) infrequent. Frames are fetched per-request and are unaffected. */
 export const CCTV_SOURCE_CACHE_MS = 15 * 60 * 1000;
 /** Per-provider catalog-fetch timeout. Bounds the worst-case refresh so one

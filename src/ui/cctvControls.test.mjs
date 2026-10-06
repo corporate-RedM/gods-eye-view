@@ -405,3 +405,71 @@ test('navigation follows the feed filter and switching to Live flies to a live c
   filter.dispatchEvent(new Event('change'));
   assert.deepEqual(calls, [], 'a live camera already on screen stays put');
 });
+
+test('the feed filter is remembered between visits and handed to the layer', (t) => {
+  const priorStorage = globalThis.localStorage;
+  const store = new Map([['gev:cctv-feed-filter:v1', 'snapshot']]);
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+  };
+  t.after(() => {
+    if (priorStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = priorStorage;
+  });
+  const filter = Object.assign(new EventTarget(), {
+    value: 'all',
+    disabled: false,
+    options: [],
+  });
+  const layerFilter = [];
+  const controls = new CctvControls({
+    elements: { _cctvPanel: {}, _cctvFeedFilter: filter },
+    cctv: { setFeedFilter: (feed) => layerFilter.push(feed) },
+    actions: { isEnabled: () => false, syncViewport() {} },
+  });
+  t.after(() => controls.destroy());
+
+  assert.equal(filter.value, 'snapshot', 'the saved choice is restored');
+  assert.deepEqual(layerFilter, ['snapshot']);
+
+  filter.value = 'live';
+  filter.dispatchEvent(new Event('change'));
+  assert.equal(store.get('gev:cctv-feed-filter:v1'), 'live');
+  assert.deepEqual(layerFilter, ['snapshot', 'live']);
+});
+
+test('a live stream that failed is labelled LIVE OFFLINE in the list and the badge', (t) => {
+  const priorDocument = globalThis.document;
+  globalThis.document = { hidden: false, createElement: () => ({}) };
+  t.after(() => {
+    globalThis.document = priorDocument;
+  });
+  const select = fakeListElement();
+  const badge = { textContent: '', dataset: {} };
+  const controls = new CctvControls({
+    elements: { _cctvSelect: select, _cctvSourceBadge: badge },
+    cctv: {},
+    actions: { isEnabled: () => true, setPanelCollapsed() {} },
+  });
+  t.after(() => controls.destroy());
+  const failed = {
+    id: 'live-1',
+    city: 'Los Angeles',
+    name: 'I-110 at 1st St',
+    isVideo: false,
+    liveFailed: true,
+  };
+  controls._renderCctvState({
+    enabled: true,
+    activeCameraId: 'live-1',
+    activeCamera: failed,
+    cameras: [failed],
+  });
+  assert.equal(
+    select.options[0].textContent,
+    'Los Angeles · I-110 at 1st St · LIVE OFFLINE',
+  );
+  assert.equal(badge.textContent, 'LIVE · OFFLINE · STILL IMAGE');
+  assert.equal(badge.dataset.frameState, 'offline');
+});

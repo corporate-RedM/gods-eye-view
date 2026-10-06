@@ -68,6 +68,7 @@ export const maybeAutoHop = layer.maybeAutoHop;
 export const cctvCycleIndex = layer.cctvCycleIndex;
 export const cctvCycleMatchingIndex = layer.cctvCycleMatchingIndex;
 export const cctvRecordMatchesFeed = layer.cctvRecordMatchesFeed;
+export const cctvDefaultCameraId = layer.cctvDefaultCameraId;
 export {
   CCTV_CALIBRATION_STORAGE_KEY_V1,
   CCTV_CALIBRATION_STORAGE_KEY_V2,

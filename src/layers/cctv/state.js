@@ -44,6 +44,12 @@ export function createState({ services }) {
 
   layerState._autoHopSec = 18;
 
+  // The panel's feed filter: 'all' | 'live' | 'snapshot'. Cameras outside it
+  // are hidden on the globe and skipped by NEAREST, PREV/NEXT, voice camera
+  // commands and AUTO HOP (see recordMatchesFeed).
+
+  layerState._feedFilter = 'all';
+
   layerState._lastHopAt = 0;
 
   layerState._lastViewContext = '';

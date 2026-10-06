@@ -208,6 +208,16 @@ export const DATA_CREDITS = [
     html: 'CCTV live video (Delaware): <a href="https://deldot.gov/map/" target="_blank" rel="noopener">DelDOT — Delaware Department of Transportation</a>',
   },
   {
+    key: 'state-511-cctv',
+    html:
+      'CCTV live video (Wisconsin, Louisiana, Nevada, Minnesota, Iowa): ' +
+      '<a href="https://511wi.gov/" target="_blank" rel="noopener">511 Wisconsin</a>, ' +
+      '<a href="https://511la.org/" target="_blank" rel="noopener">511 Louisiana</a>, ' +
+      '<a href="https://nvroads.com/" target="_blank" rel="noopener">NVroads</a>, ' +
+      '<a href="https://511mn.org/" target="_blank" rel="noopener">511 Minnesota</a>, ' +
+      '<a href="https://www.511ia.org/" target="_blank" rel="noopener">511 Iowa</a> (courtesy)',
+  },
+  {
     key: 'geonames-cctv-places',
     html: 'CCTV camera city labels: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0)',
   },

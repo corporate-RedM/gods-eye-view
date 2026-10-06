@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { knownDeadCaltransStreams } from './caltransStreams.js';
+import { knownDeadStreams } from './streamHealth.js';
 import {
   DEFAULT_AUSTIN_ROWS_URL,
   DEFAULT_AUSTIN_MAX_SOURCES,
@@ -315,9 +315,9 @@ export async function loadCaltransSourcesFromOpenData() {
     }
   }
 
-  // Dead stream links (see caltransStreams.js) are dropped; the camera keeps
+  // Dead stream links (see streamHealth.js) are dropped; the camera keeps
   // its still image.
-  const deadStreams = await knownDeadCaltransStreams(
+  const deadStreams = await knownDeadStreams(
     cameras
       .filter((camera) => camera.feedType === 'hls')
       .map((camera) => camera.url),
@@ -1724,8 +1724,17 @@ export async function loadDelDOTSourcesFromOpenData() {
       });
     }
 
+    // DelDOT cameras are video-only (no still image to fall back to), so a
+    // camera whose stream is known dead (streamHealth.js) is left out.
+    const deadStreams = await knownDeadStreams(
+      cameras.map((camera) => camera.url),
+    );
     const unique = Array.from(
-      new Map(cameras.map((camera) => [camera.id, camera])).values(),
+      new Map(
+        cameras
+          .filter((camera) => !deadStreams.has(camera.url))
+          .map((camera) => [camera.id, camera]),
+      ).values(),
     );
     const maxRaw = Number(
       process.env.CCTV_DELDOT_MAX_SOURCES || DEFAULT_DELDOT_MAX_SOURCES,

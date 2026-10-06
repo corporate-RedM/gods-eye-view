@@ -8,7 +8,8 @@ feed names only a road, region or country are searchable by city.
   <https://download.geonames.org/export/dump/>
 - **License:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
   attribution "GeoNames" (registered in `src/data/dataCredits.js`)
-- **Extract:** Ontario, British Columbia, Texas, Delaware, Finland, New South
-  Wales and Estonia; neighbourhood sections (PPLX) and historical or abandoned
-  places removed. Fields: name, lat, lon, population.
+- **Extract:** Ontario, British Columbia, Texas, Delaware, Wisconsin,
+  Louisiana, Nevada, Minnesota, Iowa, Finland, New South Wales and Estonia;
+  neighbourhood sections (PPLX) and historical or abandoned places removed.
+  Fields: name, lat, lon, population.
 - **Rebuild:** `node scripts/build-cctv-places.mjs` (needs the `unzip` command)

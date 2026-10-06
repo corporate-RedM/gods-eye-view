@@ -43,6 +43,7 @@ import cctvLayer, {
   computeFrustumGeometry,
   cctvCycleIndex,
   cctvCycleMatchingIndex,
+  cctvDefaultCameraId,
   cctvRecordMatchesFeed,
   cctvEmptyClickDeselects,
   cctvRecordNeedsActivation,
@@ -1332,6 +1333,79 @@ test('CCTV null-active coverage, auto-hop, cycling, and panel targets stay hones
     );
   } finally {
     cctvLayer.setParams({ autoHop: false });
+    _setCctvOverlayHostForTest();
+    _setCctvCoverageStateForTest({ enabled: false });
+  }
+});
+
+test('the feed filter hides other cameras and their coverage on the globe', () => {
+  const viewer = makeDeselectViewer();
+  const feedTypes = ['image', 'hls', 'image', 'hls'];
+  const records = feedTypes.map((feedType, index) => {
+    const record = makeDeselectRecord(`cam-${index}`, index);
+    record.camera.feedType = feedType;
+    record.billboard = {
+      show: true,
+      position: Cesium.Cartesian3.fromDegrees(
+        record.camera.lon,
+        record.camera.lat,
+        0,
+      ),
+    };
+    return record;
+  });
+  const shown = () =>
+    records.filter((record) => record.billboard.show).map((r) => r.camera.id);
+  const outlined = () =>
+    records
+      .filter((record) => record.coverageEntities.some((entity) => entity.show))
+      .map((record) => record.camera.id);
+  _setCctvOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  const state = { viewer, records, enabled: true, coverageMode: 'on' };
+  try {
+    _setCctvCoverageStateForTest({ ...state, activeCameraId: 'cam-0' });
+
+    assert.equal(cctvLayer.setFeedFilter('live'), 'live');
+    assert.deepEqual(
+      shown(),
+      ['cam-0', 'cam-1', 'cam-3'],
+      'snapshots hide; the active snapshot camera stays visible',
+    );
+    assert.deepEqual(
+      outlined(),
+      ['cam-0', 'cam-1', 'cam-3'],
+      'hidden snapshot neighbours get no coverage outline',
+    );
+
+    // Another snapshot becoming active shows it and hides the previous one.
+    _setCctvCoverageStateForTest({ ...state, activeCameraId: 'cam-2' });
+    refreshCoverageStyles();
+    assert.deepEqual(shown(), ['cam-1', 'cam-2', 'cam-3']);
+
+    assert.equal(cctvLayer.setFeedFilter('snapshot'), 'snapshot');
+    assert.deepEqual(shown(), ['cam-0', 'cam-2']);
+
+    // The camera the layer starts on honours the filter (a remembered Live
+    // video choice never opens on a snapshot); unfiltered it stays the first.
+    cctvLayer.setFeedFilter('live');
+    assert.ok(['cam-1', 'cam-3'].includes(cctvDefaultCameraId()));
+    cctvLayer.setFeedFilter('snapshot');
+    assert.ok(['cam-0', 'cam-2'].includes(cctvDefaultCameraId()));
+
+    assert.equal(cctvLayer.setFeedFilter('bogus'), 'all');
+    assert.equal(cctvDefaultCameraId(), 'cam-0');
+    assert.deepEqual(shown(), ['cam-0', 'cam-1', 'cam-2', 'cam-3']);
+
+    // AUTO HOP walks the filtered set (activation itself needs a full scene,
+    // so the browser QA proves the hops; this pins the wiring).
+    assert.match(maybeAutoHop.toString(), /nearestCameraIdToViewer\(feed\)/);
+    assert.match(maybeAutoHop.toString(), /cctvCycleMatchingIndex\(/);
+  } finally {
+    cctvLayer.setFeedFilter('all');
     _setCctvOverlayHostForTest();
     _setCctvCoverageStateForTest({ enabled: false });
   }

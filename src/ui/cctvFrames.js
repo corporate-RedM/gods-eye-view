@@ -90,6 +90,12 @@ export function _syncCctvSourceBadge(activeCamera, enabled) {
     this._cctvSourceBadge.dataset.frameState = 'idle';
     return;
   }
+  // The live stream failed this session; the panel is showing the still.
+  if (activeCamera.liveFailed) {
+    this._cctvSourceBadge.textContent = 'LIVE · OFFLINE · STILL IMAGE';
+    this._cctvSourceBadge.dataset.frameState = 'offline';
+    return;
+  }
   const hasDisplayedFrame =
     this._cctvFrameWrap?.classList.contains('has-frame');
   if (this._cctvFrame?.dataset.loading === 'true' && !hasDisplayedFrame) {

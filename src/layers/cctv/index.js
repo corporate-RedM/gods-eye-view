@@ -112,6 +112,7 @@ export function createCctvLayer({ services, source }) {
       cctvCycleIndex: parts.navigation.cctvCycleIndex,
       cctvCycleMatchingIndex: parts.navigation.cctvCycleMatchingIndex,
       cctvRecordMatchesFeed: parts.navigation.recordMatchesFeed,
+      cctvDefaultCameraId: parts.navigation.defaultCameraId,
     },
   );
 }

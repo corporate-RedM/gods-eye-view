@@ -143,10 +143,16 @@ export function createRendering({
     )
       return;
     const occluder = horizonOccluder(layerState._viewer.camera);
+    const feed = layerState._feedFilter;
     for (const record of layerState._records) {
       const bb = record.billboard;
       if (!bb) continue;
-      const visible = occluder.isPointVisible(bb.position);
+      // The panel's feed filter hides non-matching icons so the globe shows
+      // what the list shows; the active camera always stays visible.
+      const visible =
+        occluder.isPointVisible(bb.position) &&
+        (record.camera.id === layerState._activeCameraId ||
+          parts.navigation.recordMatchesFeed(record, feed));
       if (bb.show !== visible) bb.show = visible;
     }
   }
@@ -192,6 +198,9 @@ export function createRendering({
   /** Applies coverage visibility/style state and lazily builds eligible sets. */
 
   function refreshCoverageStyles() {
+    // Under a feed filter, icon visibility depends on which camera is active
+    // (it stays visible even outside the filter), so re-run the cull here.
+    if (layerState._feedFilter !== 'all') refreshHorizonCulling();
     const activeRecord = parts.selection.getActiveRecord();
     parts.geometry.ensureActiveCoverageEntities(activeRecord);
     const activeId = activeRecord?.camera.id || null;

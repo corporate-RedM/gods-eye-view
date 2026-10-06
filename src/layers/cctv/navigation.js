@@ -25,6 +25,26 @@ export function createNavigation({
   }
 
   /**
+   * The camera the layer starts on before anyone picks one. Without a feed
+   * filter that is the first catalog camera, as before; under a filter it is
+   * the nearest matching camera (or the first matching one when there is no
+   * viewer yet), so a remembered Live video filter never opens on a snapshot.
+   * @returns {string|null}
+   */
+
+  function defaultCameraId() {
+    const feed = layerState._feedFilter;
+    const first = layerState._records[0]?.camera.id ?? null;
+    if (feed !== 'live' && feed !== 'snapshot') return first;
+    return (
+      nearestCameraIdToViewer(feed) ??
+      layerState._records.find((record) => recordMatchesFeed(record, feed))
+        ?.camera.id ??
+      first
+    );
+  }
+
+  /**
    * Finds the camera closest to the Cesium viewer's current position.
    * @param {string} [feed] Optional feed filter (see recordMatchesFeed).
    * @returns {string|null} Camera ID of the nearest camera, or null.
@@ -125,8 +145,10 @@ export function createNavigation({
     const viewChanged = viewKey !== layerState._lastViewContext;
     layerState._lastViewContext = viewKey;
 
+    // AUTO HOP stays within the panel's feed filter.
+    const feed = layerState._feedFilter;
     if (viewChanged) {
-      const nearest = nearestCameraIdToViewer();
+      const nearest = nearestCameraIdToViewer(feed);
       if (nearest && nearest !== layerState._activeCameraId) {
         // Use setActiveCamera so the full activation path runs (obstruction
         // probe, projection runtime, geometry rewrite) — previously bypassed
@@ -137,13 +159,14 @@ export function createNavigation({
       }
     }
 
-    const nextIdx = cctvCycleIndex(
-      layerState._records.findIndex(
-        (record) => record.camera.id === layerState._activeCameraId,
-      ),
-      1,
-      layerState._records.length,
+    const currentIdx = layerState._records.findIndex(
+      (record) => record.camera.id === layerState._activeCameraId,
     );
+    const nextIdx =
+      feed === 'live' || feed === 'snapshot'
+        ? cctvCycleMatchingIndex(layerState._records, currentIdx, 1, feed)
+        : cctvCycleIndex(currentIdx, 1, layerState._records.length);
+    if (nextIdx < 0) return;
     parts.selection.setActiveCamera(layerState._records[nextIdx].camera.id);
     layerState._lastHopAt = nowMs;
   }
@@ -202,6 +225,7 @@ export function createNavigation({
   }
   return {
     recordMatchesFeed,
+    defaultCameraId,
     nearestCameraIdToViewer,
     focusCctvRecord,
     focusCamera,

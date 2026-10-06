@@ -17,6 +17,11 @@ const REGION_BY_CITY_ID = [
   ['nsw', 'New South Wales, Australia'],
   ['calgary', 'Alberta, Canada'],
   ['deldot-', 'Delaware, USA'],
+  ['us-wi', 'Wisconsin, USA'],
+  ['us-la', 'Louisiana, USA'],
+  ['us-nv', 'Nevada, USA'],
+  ['us-mn', 'Minnesota, USA'],
+  ['us-ia', 'Iowa, USA'],
 ];
 
 /** The pack's region for a camera, or '' when the pack is unknown. */

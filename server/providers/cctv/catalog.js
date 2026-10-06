@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_CCTV_SOURCE_FILE, CCTV_SOURCE_CACHE_MS } from './constants.js';
+import {
+  DEFAULT_CCTV_SOURCE_FILE,
+  CCTV_SOURCE_CACHE_MS,
+  CASTLE_ROCK_511_SITES,
+} from './constants.js';
+import { loadCastleRock511Sources } from './castleRock511.js';
 import { allocateSourceCap, resolveCatalogCap } from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
 import { normalizeSourceItem } from './normalize.js';
@@ -93,6 +98,14 @@ const LIVE_PACKS = [
     enabled: () => envEnabled('CCTV_DELDOT_ENABLED'),
     load: loadDelDOTSourcesFromOpenData,
   },
+  // State 511 sites with open live video (Wisconsin, Louisiana, Nevada,
+  // Minnesota, Iowa): one pack per state so each has its own kill switch
+  // (CCTV_<STATE>_ENABLED) and a fair share of the catalog cap.
+  ...CASTLE_ROCK_511_SITES.map((site) => ({
+    name: site.pack,
+    enabled: () => envEnabled(`CCTV_${site.envKey}_ENABLED`),
+    load: () => loadCastleRock511Sources(site.id),
+  })),
 ];
 /**
  * Load CCTV sources from a local JSON file (CCTV_SOURCES_FILE env or default).

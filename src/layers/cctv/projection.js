@@ -240,6 +240,9 @@ export function createProjection({
         {
           onFailure: () => {
             if (runtime.disposed) return;
+            // Marked for the panel ("LIVE OFFLINE"): the stream failed in this
+            // session and the camera now shows its still image.
+            record.liveFailed = true;
             runtime.video = null;
             runtime.mode = 'image';
             runtime.image = new Image();

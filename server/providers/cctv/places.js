@@ -26,6 +26,12 @@ const CITY_LABEL_MODE = {
   drivebc: 'prefix',
   nsw: 'prefix',
   deldot: 'prefix',
+  // State 511 live-video packs (castleRock511.js) carry only the state name.
+  wisconsin511: 'replace',
+  louisiana511: 'replace',
+  nevada511: 'replace',
+  minnesota511: 'replace',
+  iowa511: 'replace',
 };
 
 let _cache = null;

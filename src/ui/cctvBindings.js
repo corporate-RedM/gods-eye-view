@@ -1,9 +1,27 @@
+/** Remembers the CCTV panel's All feeds / Live video / Snapshots choice. */
+export const CCTV_FEED_FILTER_STORAGE_KEY = 'gev:cctv-feed-filter:v1';
+
 export function _initCctvPanel() {
   if (!this._cctvPanel) return;
 
   // NEAREST / PREV / NEXT stay within the feed filter (All feeds / Live video
   // / Snapshots), matching what the dropdown and search list.
   const feedFilter = () => this._cctvFeedFilter?.value || 'all';
+
+  // The chosen filter is remembered between visits and handed to the layer,
+  // which hides non-matching cameras on the globe and applies the filter to
+  // voice camera commands and AUTO HOP.
+  if (this._cctvFeedFilter) {
+    let stored = null;
+    try {
+      stored = localStorage.getItem(CCTV_FEED_FILTER_STORAGE_KEY);
+    } catch {
+      /* Storage unavailable: start from All feeds. */
+    }
+    if (stored === 'live' || stored === 'snapshot')
+      this._cctvFeedFilter.value = stored;
+    this.cctv.setFeedFilter?.(feedFilter());
+  }
 
   this.listen(this._cctvEnableBtn, 'click', async () => {
     this._actionGeneration++;
@@ -101,8 +119,14 @@ export function _initCctvPanel() {
   // screen is not of the chosen type, fly to the nearest camera that is.
   this.listen(this._cctvFeedFilter, 'change', () => {
     if (this._cctvSearch) this._cctvSearch.value = '';
-    this._renderCctvState(this._cctvState);
     const feed = feedFilter();
+    try {
+      localStorage.setItem(CCTV_FEED_FILTER_STORAGE_KEY, feed);
+    } catch {
+      /* Storage unavailable: the choice lasts for this page only. */
+    }
+    this.cctv.setFeedFilter?.(feed);
+    this._renderCctvState(this._cctvState);
     if (feed === 'all' || !this.actions.isEnabled()) return;
     const active = this._cctvState?.activeCamera;
     if (active && (feed === 'live') === !!active.isVideo) return;

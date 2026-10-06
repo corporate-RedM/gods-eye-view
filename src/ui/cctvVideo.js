@@ -1,10 +1,15 @@
-/** Paint a second surface from the projection decoder, bounded to 640px/15 fps. */
+/**
+ * Paint a second surface from the projection decoder, bounded to 15 fps and
+ * `maxWidth()` pixels wide (640 by default; the panel raises it while the
+ * feed is maximized so full-screen video is not upscaled from 640).
+ */
 export function createCctvVideoSurface(
   canvas,
   getVideo,
   {
     requestFrame = requestAnimationFrame,
     cancelFrame = cancelAnimationFrame,
+    maxWidth = () => 640,
   } = {},
 ) {
   const ctx = canvas.getContext('2d');
@@ -29,7 +34,7 @@ export function createCctvVideoSurface(
       now - paintedAt >= 1000 / 15 &&
       video.currentTime !== previousTime
     ) {
-      const width = Math.min(640, video.videoWidth);
+      const width = Math.min(maxWidth(), video.videoWidth);
       const height = Math.max(
         1,
         Math.round((width * video.videoHeight) / video.videoWidth),

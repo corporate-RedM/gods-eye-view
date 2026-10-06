@@ -3,7 +3,8 @@
 // Downloads GeoNames cities1000 (every populated place with 1,000+ people,
 // CC BY 4.0) and keeps only the regions whose camera packs carry a road,
 // region or country instead of a city: Ontario, British Columbia, Texas,
-// Delaware, Finland, New South Wales and Estonia. Neighbourhood sections
+// Delaware, Wisconsin, Louisiana, Nevada, Minnesota, Iowa, Finland, New South
+// Wales and Estonia. Neighbourhood sections
 // (PPLX) and historical/abandoned places are dropped so a label names the
 // city a viewer would search for. Requires the `unzip` command.
 //
@@ -21,7 +22,8 @@ const OUT_FILE = path.join(ROOT, 'src/data/local_data/cctv_places/places.json');
 /** Country code → admin1 codes to keep (null keeps the whole country). */
 const REGIONS = {
   CA: ['08', '02'], // Ontario, British Columbia
-  US: ['TX', 'DE'],
+  // Texas, Delaware, and the state 511 live-video packs.
+  US: ['TX', 'DE', 'WI', 'LA', 'NV', 'MN', 'IA'],
   FI: null,
   AU: ['02'], // New South Wales
   EE: null,

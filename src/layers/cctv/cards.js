@@ -102,6 +102,10 @@ export function createCards({ state: layerState, services, parts, source }) {
     for (const record of layerState._records) {
       const id = record.camera.id;
       if (id === activeId || !record.position) continue;
+      // Cameras outside the panel's feed filter are hidden on the globe and
+      // get no ambient card.
+      if (!parts.navigation.recordMatchesFeed(record, layerState._feedFilter))
+        continue;
       let inView = false;
       let sx = NaN;
       let sy = NaN;

@@ -61,10 +61,13 @@ export function _renderCctvState(state) {
     const matchesFilter = (cam) =>
       feedFilter === 'all' || (feedFilter === 'live') === !!cam.isVideo;
     const listed = cameras.filter(matchesFilter);
-    // isVideo is part of the signature: a stream that falls back to its still
-    // image moves the camera from Live video to Snapshots.
+    // isVideo and liveFailed are part of the signature: a stream that falls
+    // back to its still image moves the camera from Live video to Snapshots,
+    // labelled LIVE OFFLINE.
     const signature = `${feedFilter}|${listed
-      .map((cam) => (cam.isVideo ? `${cam.id}+` : cam.id))
+      .map((cam) =>
+        cam.isVideo ? `${cam.id}+` : cam.liveFailed ? `${cam.id}!` : cam.id,
+      )
       .join(',')}`;
     if (signature !== this._cctvListSignature) {
       this._cctvListSignature = signature;
@@ -88,7 +91,12 @@ export function _renderCctvState(state) {
       for (const camera of listed) {
         const option = document.createElement('option');
         option.value = camera.id;
-        option.textContent = `${camera.city} · ${camera.name}${camera.isVideo ? ' · LIVE' : ''}`;
+        const feedTag = camera.isVideo
+          ? ' · LIVE'
+          : camera.liveFailed
+            ? ' · LIVE OFFLINE'
+            : '';
+        option.textContent = `${camera.city} · ${camera.name}${feedTag}`;
         this._cctvSelect.appendChild(option);
         let searchLabel = option.textContent;
         if (this._cctvSearchIds.has(searchLabel))
@@ -216,8 +224,14 @@ export function _renderCctvState(state) {
     }
     this._cctvVideoCameraId = activeId;
     if (visible && !this._cctvVideoSurface) {
-      this._cctvVideoSurface = createCctvVideoSurface(this._cctvVideo, () =>
-        this.cctv.getActiveVideoElement?.(),
+      this._cctvVideoSurface = createCctvVideoSurface(
+        this._cctvVideo,
+        () => this.cctv.getActiveVideoElement?.(),
+        {
+          // Full resolution (up to 1080p) while the feed is maximized.
+          maxWidth: () =>
+            document.fullscreenElement === this._cctvFrameWrap ? 1920 : 640,
+        },
       );
     }
   }

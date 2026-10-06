@@ -496,20 +496,28 @@ export function createGeometry({ state: layerState, services, parts, source }) {
     // invent an arbitrary catalog-order cohort.
     if (!activeRecord) return new Set();
 
-    const ranked = layerState._records.map((record) => {
-      if (record === activeRecord) {
-        return { record, distKm: -1 };
-      }
-      return {
-        record,
-        distKm: parts.model.haversineKm(
-          activeRecord.camera.lat,
-          activeRecord.camera.lon,
-          record.camera.lat,
-          record.camera.lon,
-        ),
-      };
-    });
+    // Neighbours outside the panel's feed filter are hidden on the globe, so
+    // they get no coverage outline either.
+    const ranked = layerState._records
+      .filter(
+        (record) =>
+          record === activeRecord ||
+          parts.navigation.recordMatchesFeed(record, layerState._feedFilter),
+      )
+      .map((record) => {
+        if (record === activeRecord) {
+          return { record, distKm: -1 };
+        }
+        return {
+          record,
+          distKm: parts.model.haversineKm(
+            activeRecord.camera.lat,
+            activeRecord.camera.lon,
+            record.camera.lat,
+            record.camera.lon,
+          ),
+        };
+      });
 
     ranked.sort((a, b) => a.distKm - b.distKm);
 
