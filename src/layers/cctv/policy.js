@@ -51,13 +51,13 @@ export const COVERAGE_NEIGHBOR_RADIUS_KM = 1.8;
 // refined in small batches (active camera first, then nearest-to-viewer) so
 // enabling the layer never raycasts every camera in a single frame.
 
-export const GEO_LOAD_BATCH_SIZE = 4;
+export const GEO_LOAD_BATCH_SIZE = 16;
 
-export const GEO_LOAD_BATCH_DELAY_MS = 120;
+export const GEO_LOAD_BATCH_DELAY_MS = 100;
 
-export const GEO_TRACKING_BATCH_SIZE = 2;
+export const GEO_TRACKING_BATCH_SIZE = 8;
 
-export const GEO_TRACKING_BATCH_DELAY_MS = 250;
+export const GEO_TRACKING_BATCH_DELAY_MS = 150;
 
 export const GEO_PROGRESS_NOTIFY_INTERVAL_MS = 300;
 

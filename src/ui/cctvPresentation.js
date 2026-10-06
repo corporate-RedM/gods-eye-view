@@ -62,14 +62,28 @@ export function _renderCctvState(state) {
       );
     if (shouldRebuild) {
       this._cctvSelect.innerHTML = '';
+      // The search box suggests these same labels; duplicate labels get the
+      // camera id appended so every suggestion resolves to exactly one camera.
+      this._cctvSearchIds = new Map();
+      if (this._cctvSearchOptions) this._cctvSearchOptions.innerHTML = '';
       for (const camera of cameras) {
         const option = document.createElement('option');
         option.value = camera.id;
         option.textContent = `${camera.city} · ${camera.name}`;
         this._cctvSelect.appendChild(option);
+        let searchLabel = option.textContent;
+        if (this._cctvSearchIds.has(searchLabel))
+          searchLabel = `${searchLabel} · ${camera.id}`;
+        this._cctvSearchIds.set(searchLabel, camera.id);
+        if (this._cctvSearchOptions) {
+          const suggestion = document.createElement('option');
+          suggestion.value = searchLabel;
+          this._cctvSearchOptions.appendChild(suggestion);
+        }
       }
     }
     this._cctvSelect.disabled = !enabled || cameras.length === 0;
+    if (this._cctvSearch) this._cctvSearch.disabled = this._cctvSelect.disabled;
     if (
       activeId &&
       Array.from(this._cctvSelect.options).some((opt) => opt.value === activeId)

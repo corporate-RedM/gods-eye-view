@@ -160,6 +160,28 @@
   outline: none;
 }
 
+#cctv-camera-search {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+}
+
+#cctv-camera-search:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -3px;
+}
+
+#cctv-camera-search:disabled {
+  opacity: 0.45;
+}
+
 #cctv-camera-select:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: -3px;

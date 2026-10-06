@@ -80,6 +80,17 @@ export function _initCctvPanel() {
     this.actions.setParams({ selectedCameraId: cameraId }, { origin: 'user' });
   });
 
+  // Picking a search suggestion (or pressing Enter on an exact label) selects
+  // that camera through the dropdown's own change path, then clears the box.
+  this.listen(this._cctvSearch, 'change', () => {
+    const cameraId = this._cctvSearchIds?.get(this._cctvSearch.value.trim());
+    if (!cameraId || !this._cctvSelect) return;
+    this._cctvSelect.value = cameraId;
+    this._cctvSelect.dispatchEvent(new Event('change'));
+    this._cctvSearch.value = '';
+    this._cctvSearch.blur();
+  });
+
   this.listen(this._cctvFocusBtn, 'click', async () => {
     const generation = ++this._actionGeneration;
     const activeId = this._cctvState?.activeCameraId;

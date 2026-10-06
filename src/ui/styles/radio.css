@@ -582,18 +582,18 @@
   left: 50%;
   top: 50%;
   padding: 3px 6px;
-  border: 1px solid rgba(116, 219, 255, 0.24);
+  border: 1px solid rgba(116, 219, 255, 0.45);
   border-radius: 3px;
-  color: #bceeff;
-  background: rgba(5, 12, 20, 0.68);
+  color: #e6f8ff;
+  background: rgba(5, 12, 20, 0.88);
   font:
-    8px/1.3 ui-monospace,
+    600 8px/1.3 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
   text-align: center;
   white-space: pre;
-  text-shadow: 0 0 5px rgba(116, 219, 255, 0.38);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .data-toggle-row.gev-voice-focus {
