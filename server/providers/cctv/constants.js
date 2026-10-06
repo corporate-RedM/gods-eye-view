@@ -238,7 +238,7 @@ export const CALGARY_MAX_CATALOG_BYTES = 4 * 1024 * 1024;
 
 /** DelDOT CCTV: one keyless statewide JSON catalog; live video via RTMP-over-HTTP (rtmpt:80). */
 export const DELDOT_CCTV_URL = 'https://tmc.deldot.gov/json/videocamera.json';
-export const DEFAULT_DELDOT_MAX_SOURCES = 300;
+export const DEFAULT_DELDOT_MAX_SOURCES = 358;
 export const DELDOT_ANCHORS = [
   { lat: 39.7459, lon: -75.5466 }, // Wilmington (New Castle)
   { lat: 39.1582, lon: -75.5244 }, // Dover (Kent)
