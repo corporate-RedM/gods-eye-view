@@ -465,8 +465,18 @@ function pickOntarioCctvView(views) {
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
 export async function loadOntarioSourcesFromOpenData() {
+  // 511on.ca now rejects keyless calls with 400 "Invalid Key"; the developer key
+  // goes in the `key` query parameter (511on.ca/help/endpoint/cameras).
+  const apiKey = String(process.env.ONTARIO_511_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn(
+      '[CCTV] Ontario 511 skipped: set ONTARIO_511_API_KEY (free developer key from 511on.ca)',
+    );
+    return [];
+  }
   try {
-    const resp = await fetch(ONTARIO_511_CAMERAS_URL, {
+    const url = `${ONTARIO_511_CAMERAS_URL}&key=${encodeURIComponent(apiKey)}`;
+    const resp = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(CCTV_SOURCE_FETCH_TIMEOUT_MS),
     });
