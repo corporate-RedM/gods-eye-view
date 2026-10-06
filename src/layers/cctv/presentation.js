@@ -1,6 +1,7 @@
 import { CCTV_AMBIENT_CARD_MAX } from '../../data/cctvLod.js';
 import { ACTIVE_FRAME_REFRESH_MS, IDLE_FRAME_REFRESH_MS } from './policy.js';
 import { headingHudToken, isHeadingEstimated } from './headingConfidence.js';
+import { cameraPlace } from '../../data/cctvRegion.js';
 
 export function createPresentation({
   state: layerState,
@@ -34,7 +35,7 @@ export function createPresentation({
     const calBadge = parts.calibration.deriveCalBadge(active.camera);
 
     return [
-      `${active.camera.city.toUpperCase()} CCTV`,
+      `${cameraPlace(active.camera).toUpperCase()} CCTV`,
       `${active.camera.name.toUpperCase()}`,
       // A synthetic bearing (headingConfidence 'low', no human calibration)
       // is tagged so a hashed guess never reads as a surveyed facing (#639).
@@ -74,7 +75,7 @@ export function createPresentation({
     return {
       id: camera.id,
       name: camera.name,
-      city: camera.city,
+      city: cameraPlace(camera),
       provider: camera.provider,
       lat: camera.lat,
       lon: camera.lon,
