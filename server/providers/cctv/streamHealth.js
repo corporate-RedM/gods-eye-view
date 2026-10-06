@@ -28,10 +28,11 @@ const PROBE_CONCURRENCY = 16;
 const UNREACHABLE_STRIKES = 2;
 /**
  * Verdict version. v2 checks the media playlist with the proxy's own parser,
- * so a stream it cannot serve (fMP4, encrypted) counts as not live; v1 only
- * fetched the master playlist and passed Iowa's fMP4 streams.
+ * so a stream it cannot serve (encrypted, byte ranges) counts as not live; v1
+ * only fetched the master playlist. v3: the proxy now serves fMP4, so Iowa's
+ * streams that v2 marked unplayable are re-checked.
  */
-export const STREAM_HEALTH_CHECK_VERSION = 2;
+export const STREAM_HEALTH_CHECK_VERSION = 3;
 const CHECK_VERSION = STREAM_HEALTH_CHECK_VERSION;
 const PROBE_HEADERS = Object.freeze({
   'User-Agent':

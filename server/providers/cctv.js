@@ -200,14 +200,21 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
         }
 
         if (url.pathname.startsWith('/media/')) {
-          const match = /^\/media\/([^/]+)(?:\/(seg_(\d+)\.ts))?$/.exec(
-            url.pathname,
-          );
+          // /media/<id> (playlist or still), /media/<id>/seg_<n>.ts|m4s
+          // (MPEG-TS or fMP4 segment), /media/<id>/init_<n>.mp4 (fMP4 init).
+          const match =
+            /^\/media\/([^/]+)(?:\/(?:seg_(\d+)\.(ts|m4s)|init_(\d+)\.mp4))?$/.exec(
+              url.pathname,
+            );
           if (!match) {
             res.writeHead(404);
             res.end();
             return;
           }
+          const segmentSeq = match[2];
+          const segmentExtension = match[3];
+          const initSeq = match[4];
+          const subresource = segmentSeq !== undefined || initSeq !== undefined;
           const cameraId = decodeURIComponent(match[1]);
           const source = sourceById.get(cameraId);
           const mediaUrl = source?.url || '';
@@ -243,15 +250,20 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
               );
               return;
             }
-            if (match[2]) {
-              const body = puller.getSegment(
-                cameraId,
-                url.searchParams.get('session'),
-                Number(match[3]),
-                leaseId,
-              );
+            if (subresource) {
+              const session = url.searchParams.get('session');
+              const body =
+                initSeq !== undefined
+                  ? puller.getInit(cameraId, session, Number(initSeq), leaseId)
+                  : puller.getSegment(
+                      cameraId,
+                      session,
+                      Number(segmentSeq),
+                      leaseId,
+                    );
               res.writeHead(body ? 200 : 404, {
-                'Content-Type': 'video/mp2t',
+                'Content-Type':
+                  segmentExtension === 'ts' ? 'video/mp2t' : 'video/mp4',
                 'Cache-Control': 'no-store',
               });
               res.end(body || undefined);
@@ -313,7 +325,7 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
             }
             return;
           }
-          if (match[2] || req.method !== 'GET') {
+          if (subresource || req.method !== 'GET') {
             res.writeHead(404);
             res.end();
             return;

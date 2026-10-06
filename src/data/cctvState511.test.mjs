@@ -182,27 +182,31 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
   });
 
   const live = 'https://video.example.gov/live/playlist.m3u8';
-  const gone = 'https://video.example.gov/gone/playlist.m3u8';
   const fmp4 = 'https://video.example.gov/fmp4/playlist.m3u8';
+  const gone = 'https://video.example.gov/gone/playlist.m3u8';
+  const encrypted = 'https://video.example.gov/aes/playlist.m3u8';
   const refused = 'https://down.example.gov/x/playlist.m3u8';
   const master =
     '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=150000\nchunklist.m3u8\n';
-  const tsMedia =
-    '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4.0,\nmedia_7.ts\n';
-  const fmp4Media =
-    '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:4.0,\nseg_7.mp4\n';
+  const media = {
+    [live]:
+      '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4.0,\nmedia_7.ts\n',
+    [fmp4]: '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:4.0,\nseg_7.mp4\n',
+    [encrypted]:
+      '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXTINF:4.0,\nmedia_7.ts\n',
+  };
   const probed = [];
   const fetchImpl = async (url) => {
     probed.push(url);
-    if (url === live || url === fmp4) return new Response(master);
-    if (url === live.replace('playlist.m3u8', 'chunklist.m3u8'))
-      return new Response(tsMedia);
-    if (url === fmp4.replace('playlist.m3u8', 'chunklist.m3u8'))
-      return new Response(fmp4Media);
+    if (url in media) return new Response(master);
+    const owner = Object.keys(media).find(
+      (stream) => stream.replace('playlist.m3u8', 'chunklist.m3u8') === url,
+    );
+    if (owner) return new Response(media[owner]);
     if (url === gone) return new Response('', { status: 404 });
     throw new TypeError('fetch failed');
   };
-  const urls = [live, gone, fmp4, refused];
+  const urls = [live, fmp4, gone, encrypted, refused];
 
   assert.deepEqual(
     [...(await knownDeadStreams(urls, { fetchImpl }))],
@@ -212,13 +216,13 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
   await settleStreamHealthChecks();
   assert.deepEqual(
     [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
-    [gone, fmp4].sort(),
-    'a 404 is dead, and an fMP4 stream the proxy cannot serve is not live',
+    [gone, encrypted].sort(),
+    'a 404 is dead, an encrypted stream the proxy cannot serve is not live, fMP4 is live',
   );
   await settleStreamHealthChecks();
   assert.deepEqual(
     [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
-    [gone, fmp4, refused].sort(),
+    [gone, encrypted, refused].sort(),
     'a host that stays unreachable is dead on the second strike',
   );
   assert.equal(
@@ -229,6 +233,7 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
 
   const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.equal(saved[live].live, true);
+  assert.equal(saved[fmp4].live, true);
   assert.equal(saved[gone].live, false);
 
   // A restart reads the verdicts back without probing.
@@ -236,24 +241,24 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
   probed.length = 0;
   assert.deepEqual(
     [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
-    [gone, fmp4, refused].sort(),
+    [gone, encrypted, refused].sort(),
   );
   assert.deepEqual(probed, []);
 
-  // A verdict from the older master-only check is re-checked.
+  // A verdict from an older check version is re-checked: v2 had marked fMP4
+  // streams unplayable before the proxy could serve them.
   fs.writeFileSync(
     file,
-    JSON.stringify({ [fmp4]: { live: true, checkedAt: Date.now() } }),
+    JSON.stringify({
+      [fmp4]: { live: false, checkedAt: Date.now(), v: v - 1 },
+    }),
   );
   _resetStreamHealthForTest();
   probed.length = 0;
   await knownDeadStreams([fmp4], { fetchImpl });
   await settleStreamHealthChecks();
   assert.ok(probed.includes(fmp4));
-  assert.deepEqual(
-    [...(await knownDeadStreams([fmp4], { fetchImpl }))],
-    [fmp4],
-  );
+  assert.deepEqual([...(await knownDeadStreams([fmp4], { fetchImpl }))], []);
 });
 
 test('a dead stream falls back to its still image, and a camera with no still is dropped', async (t) => {

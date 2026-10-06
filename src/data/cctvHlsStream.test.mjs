@@ -207,6 +207,94 @@ test('two consumers share downloads but release and abandoned expiry are indepen
   await manager.shutdown();
 });
 
+const fmp4Playlist =
+  '#EXTM3U\n#EXT-X-VERSION:10\n#EXT-X-MEDIA-SEQUENCE:40\n#EXT-X-MAP:URI="cam_init.mp4"\n#EXTINF:4,\ncam_seg40.mp4\n#EXTINF:4,\ncam_seg41.mp4\n#EXTINF:4,\ncam_seg42.m4s\n';
+
+test('fMP4 playlists parse with their init segment; unsafe init references fail closed', () => {
+  const parsed = parseHlsMedia(fmp4Playlist, base);
+  assert.deepEqual(
+    parsed.map((s) => s.seq),
+    [40, 41, 42],
+  );
+  assert.ok(
+    parsed.every((s) => s.map === 'https://camera.example/live/cam_init.mp4'),
+  );
+  assert.equal(parseHlsMedia(playlist, base)[0].map, null, 'TS has no init');
+  for (const bad of [
+    fmp4Playlist.replace(
+      'URI="cam_init.mp4"',
+      'URI="cam_init.mp4",BYTERANGE="720@0"',
+    ),
+    fmp4Playlist.replace('cam_init.mp4', 'https://evil.example/init.mp4'),
+    fmp4Playlist.replace('cam_init.mp4', 'cam_init.ts'),
+    fmp4Playlist.replace('#EXT-X-MAP:URI="cam_init.mp4"', '#EXT-X-MAP:'),
+    fmp4Playlist.replace('cam_seg41.mp4', 'cam_seg41.ts'),
+    fmp4Playlist.replace('cam_seg40.mp4', 'https://evil.example/seg.mp4'),
+    '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="k"\n' + fmp4Playlist.slice(8),
+  ])
+    assert.throws(() => parseHlsMedia(bad, base), bad);
+});
+
+test('an fMP4 session serves its init once, budgets it, and restarts on a new init', async () => {
+  let current = fmp4Playlist;
+  const downloads = [];
+  const manager = createHlsPuller({
+    limits: { ...HLS_LIMITS, pollMs: 5 },
+    fetchImpl: async (url) => {
+      downloads.push(url.split('/').pop());
+      if (url.endsWith('.m3u8')) return new Response(current);
+      return new Response(url.includes('init') ? 'INIT' : 'moof');
+    },
+  });
+  const entry = await manager.ensure('ia', base, 'viewer');
+  assert.equal(await manager.waitReady(entry), true);
+  const text = await manager.buildPlaylist(entry, 'ia', 'viewer');
+  assert.match(text, /#EXT-X-VERSION:7/);
+  assert.match(
+    text,
+    /#EXT-X-MAP:URI="\/api\/cctv\/media\/ia\/init_0\.mp4\?session=[^"]+&lease=viewer"/,
+  );
+  assert.match(text, /\/api\/cctv\/media\/ia\/seg_0\.m4s\?session=/);
+  assert.doesNotMatch(text, /\.ts\?/);
+  assert.equal(
+    manager.getInit('ia', entry.token, 0, 'viewer').toString(),
+    'INIT',
+  );
+  assert.equal(manager.getInit('ia', 'stale', 0, 'viewer'), null);
+  assert.equal(manager.getInit('ia', entry.token, 1, 'viewer'), null);
+  assert.equal(
+    downloads.filter((name) => name === 'cam_init.mp4').length,
+    1,
+    'the init is fetched once while it is unchanged',
+  );
+  // Init (4 bytes) plus three 4-byte segments.
+  assert.deepEqual(manager.stats(), { sessions: 1, bytes: 16 });
+
+  // An encoder restart publishes a new init: the cache restarts under it.
+  current = fmp4Playlist.replace('cam_init.mp4', 'cam_init2.mp4');
+  await new Promise((r) => setTimeout(r, 40));
+  const after = await manager.buildPlaylist(entry, 'ia', 'viewer');
+  assert.match(after, /init_1\.mp4/);
+  assert.match(
+    after,
+    /#EXT-X-DISCONTINUITY\n#EXTINF:4\.000,\n[^\n]+seg_3\.m4s/,
+  );
+  assert.equal(manager.getInit('ia', entry.token, 0, 'viewer'), null);
+  await manager.shutdown();
+});
+
+test('a playlist mixing init segments is refused by the puller', async () => {
+  const mixed =
+    '#EXTM3U\n#EXT-X-MAP:URI="a_init.mp4"\n#EXTINF:4,\na.mp4\n#EXT-X-MAP:URI="b_init.mp4"\n#EXTINF:4,\nb.mp4\n';
+  const manager = createHlsPuller({
+    limits: { ...HLS_LIMITS, pollMs: 5, readyMs: 100 },
+    fetchImpl: async (url) => new Response(url.endsWith('.m3u8') ? mixed : 'x'),
+  });
+  const entry = await manager.ensure('ia', base);
+  assert.equal(await manager.waitReady(entry), false);
+  await manager.shutdown();
+});
+
 test('an abandoned consumer expires while a renewed consumer keeps the session', async () => {
   const manager = createHlsPuller({
     limits: { ...HLS_LIMITS, idleMs: 80, pollMs: 100000 },
