@@ -218,3 +218,190 @@ test('disposing during camera enable prevents the delayed focus and future click
   assert.equal(enables, 1);
   assert.equal(focuses, 0);
 });
+
+function fakeListElement(options = []) {
+  return {
+    options,
+    value: '',
+    disabled: false,
+    selectedIndex: -1,
+    set innerHTML(_markup) {
+      this.options.length = 0;
+    },
+    appendChild(option) {
+      this.options.push(option);
+    },
+  };
+}
+
+test('the feed filter lists only live video or only snapshot cameras', (t) => {
+  const priorDocument = globalThis.document;
+  globalThis.document = { hidden: false, createElement: () => ({}) };
+  t.after(() => {
+    globalThis.document = priorDocument;
+  });
+  const filter = fakeListElement([
+    { value: 'all', textContent: 'All feeds' },
+    { value: 'live', textContent: 'Live video' },
+    { value: 'snapshot', textContent: 'Snapshots' },
+  ]);
+  filter.value = 'all';
+  const select = fakeListElement();
+  const suggestions = fakeListElement();
+  const controls = new CctvControls({
+    elements: {
+      _cctvSelect: select,
+      _cctvSearchOptions: suggestions,
+      _cctvFeedFilter: filter,
+    },
+    cctv: {},
+    actions: { isEnabled: () => true, setPanelCollapsed() {} },
+  });
+  t.after(() => controls.destroy());
+  const state = {
+    enabled: true,
+    activeCameraId: 'snap-1',
+    cameras: [
+      {
+        id: 'live-1',
+        city: 'Los Angeles',
+        name: 'I-110 at 1st St',
+        isVideo: true,
+      },
+      { id: 'snap-1', city: 'Austin', name: 'Congress at 5th', isVideo: false },
+      {
+        id: 'live-2',
+        city: 'Wilmington',
+        name: 'King St at 10th',
+        isVideo: true,
+      },
+    ],
+  };
+  const listed = () => select.options.map((option) => option.value);
+  const suggested = () => suggestions.options.map((option) => option.value);
+
+  controls._renderCctvState(state);
+  assert.deepEqual(listed(), ['live-1', 'snap-1', 'live-2']);
+  assert.deepEqual(
+    filter.options.map((option) => option.textContent),
+    ['All feeds (3)', 'Live video (2)', 'Snapshots (1)'],
+  );
+  assert.equal(
+    select.options[0].textContent,
+    'Los Angeles · I-110 at 1st St · LIVE',
+  );
+
+  filter.value = 'live';
+  controls._renderCctvState(state);
+  assert.deepEqual(
+    listed(),
+    ['live-1', 'live-2'],
+    'the dropdown lists live cameras only, even while a snapshot is active',
+  );
+  assert.deepEqual(suggested(), [
+    'Los Angeles · I-110 at 1st St · LIVE',
+    'Wilmington · King St at 10th · LIVE',
+  ]);
+  assert.equal(
+    select.selectedIndex,
+    -1,
+    'the active snapshot camera is not shown as a live selection',
+  );
+
+  filter.value = 'snapshot';
+  controls._renderCctvState({ ...state, activeCameraId: null });
+  assert.deepEqual(listed(), ['snap-1']);
+  assert.deepEqual(suggested(), ['Austin · Congress at 5th']);
+  assert.deepEqual(
+    filter.options.map((option) => option.textContent),
+    ['All feeds (3)', 'Live video (2)', 'Snapshots (1)'],
+    'counts are rewritten in place, not appended',
+  );
+
+  // A stream that falls back to its still image moves to Snapshots.
+  controls._renderCctvState({
+    ...state,
+    activeCameraId: null,
+    cameras: state.cameras.map((cam) =>
+      cam.id === 'live-2' ? { ...cam, isVideo: false } : cam,
+    ),
+  });
+  assert.deepEqual(listed(), ['snap-1', 'live-2']);
+});
+
+test('navigation follows the feed filter and switching to Live flies to a live camera', async (t) => {
+  const filter = Object.assign(new EventTarget(), {
+    value: 'all',
+    disabled: false,
+    options: [],
+  });
+  const nextBtn = new EventTarget();
+  const nearestBtn = new EventTarget();
+  const calls = [];
+  const focused = [];
+  const controls = new CctvControls({
+    elements: {
+      _cctvPanel: {},
+      _cctvFeedFilter: filter,
+      _cctvNextBtn: nextBtn,
+      _cctvNearestBtn: nearestBtn,
+    },
+    cctv: {
+      cycleCamera(step, options) {
+        calls.push(['cycle', step, options.feed]);
+        return 'live-2';
+      },
+      focusNearest(options) {
+        calls.push(['nearest', options.feed]);
+        return 'live-1';
+      },
+      focusCamera(cameraId) {
+        focused.push(cameraId);
+      },
+    },
+    actions: {
+      isEnabled: () => true,
+      syncViewport() {},
+      toggleEnabled: async () => true,
+      runExplicitFocus(activate, focus) {
+        const cameraId = activate();
+        if (cameraId) focus(cameraId);
+      },
+    },
+  });
+  t.after(() => controls.destroy());
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  controls._cctvState = {
+    activeCameraId: 'snap-1',
+    activeCamera: { id: 'snap-1', isVideo: false },
+    cameras: [],
+  };
+  filter.value = 'live';
+  filter.dispatchEvent(new Event('change'));
+  assert.deepEqual(calls, [['nearest', 'live']]);
+  assert.deepEqual(
+    focused,
+    ['live-1'],
+    'a snapshot on screen gives way to the nearest live camera',
+  );
+
+  controls._cctvState = {
+    activeCameraId: 'live-1',
+    activeCamera: { id: 'live-1', isVideo: true },
+    cameras: [],
+  };
+  nextBtn.dispatchEvent(new Event('click'));
+  await settle();
+  nearestBtn.dispatchEvent(new Event('click'));
+  await settle();
+  assert.deepEqual(calls.slice(1), [
+    ['cycle', 1, 'live'],
+    ['nearest', 'live'],
+  ]);
+
+  calls.length = 0;
+  filter.value = 'live';
+  filter.dispatchEvent(new Event('change'));
+  assert.deepEqual(calls, [], 'a live camera already on screen stays put');
+});

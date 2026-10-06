@@ -8,11 +8,29 @@ export function createNavigation({
   source,
 }) {
   /**
+   * Whether a camera record matches the panel's feed filter. 'live' is video
+   * that has not fallen back to its still image (the panel's isVideo);
+   * 'snapshot' is everything else; any other value matches every record.
+   * @param {Object} record CCTV camera runtime record.
+   * @param {string} [feed] 'live', 'snapshot', or anything else for all.
+   * @returns {boolean}
+   */
+
+  function recordMatchesFeed(record, feed) {
+    if (feed !== 'live' && feed !== 'snapshot') return true;
+    const live =
+      parts.model.isVideoFeedType(record.camera.feedType) &&
+      record.projection?.mode !== 'image';
+    return feed === 'live' ? live : !live;
+  }
+
+  /**
    * Finds the camera closest to the Cesium viewer's current position.
+   * @param {string} [feed] Optional feed filter (see recordMatchesFeed).
    * @returns {string|null} Camera ID of the nearest camera, or null.
    */
 
-  function nearestCameraIdToViewer() {
+  function nearestCameraIdToViewer(feed) {
     const carto = layerState._viewer?.camera?.positionCartographic;
     if (!carto || !layerState._records.length) return null;
     const lat = Cesium.Math.toDegrees(carto.latitude);
@@ -20,6 +38,7 @@ export function createNavigation({
 
     let best = null;
     for (const record of layerState._records) {
+      if (!recordMatchesFeed(record, feed)) continue;
       const distKm = parts.model.haversineKm(
         lat,
         lon,
@@ -147,11 +166,47 @@ export function createNavigation({
     }
     return (((Math.floor(currentIdx) + delta) % total) + total) % total;
   }
+
+  /**
+   * Like cctvCycleIndex, but only lands on records matching the feed filter.
+   * Walks the catalog in its usual order from the current position, so NEXT
+   * from a camera outside the filter reaches the next matching one after it.
+   * @param {Object[]} records Catalog records in cycle order.
+   * @param {number} currentIdx Active record index, or -1 for none.
+   * @param {number} step Positions to move among matching records.
+   * @param {string} feed 'live' or 'snapshot' (see recordMatchesFeed).
+   * @returns {number} Index of the target record, or -1 when none matches.
+   */
+
+  function cctvCycleMatchingIndex(records, currentIdx, step, feed) {
+    const total = records.length;
+    const delta = Number.isFinite(step) ? Math.trunc(step) : 1;
+    const direction = delta < 0 ? -1 : 1;
+    let remaining = Math.max(1, Math.abs(delta));
+    let idx =
+      Number.isFinite(currentIdx) && currentIdx >= 0 && currentIdx < total
+        ? Math.floor(currentIdx)
+        : direction > 0
+          ? -1
+          : total;
+    // Bounded so an empty filter result ends instead of looping; a step
+    // larger than the matching set wraps around it, as cctvCycleIndex does.
+    const maxVisits = total * remaining;
+    for (let visited = 0; visited < maxVisits; visited += 1) {
+      idx = (idx + direction + total) % total;
+      if (!recordMatchesFeed(records[idx], feed)) continue;
+      remaining -= 1;
+      if (remaining === 0) return idx;
+    }
+    return -1;
+  }
   return {
+    recordMatchesFeed,
     nearestCameraIdToViewer,
     focusCctvRecord,
     focusCamera,
     maybeAutoHop,
     cctvCycleIndex,
+    cctvCycleMatchingIndex,
   };
 }

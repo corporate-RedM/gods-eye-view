@@ -42,6 +42,8 @@ import cctvLayer, {
   clearProbeClampOnDeactivation,
   computeFrustumGeometry,
   cctvCycleIndex,
+  cctvCycleMatchingIndex,
+  cctvRecordMatchesFeed,
   cctvEmptyClickDeselects,
   cctvRecordNeedsActivation,
   deactivateActiveCamera,
@@ -361,14 +363,14 @@ test('default COVERAGE refresh materializes the active and visible camera frustu
 });
 
 test('geometry drain pacing yields to tracked and cockpit camera ownership', () => {
-  assert.deepEqual(cctvGeometryDrainPacing(), { batchSize: 4, delayMs: 120 });
+  assert.deepEqual(cctvGeometryDrainPacing(), { batchSize: 16, delayMs: 100 });
   assert.deepEqual(
     cctvGeometryDrainPacing({ trackedEntity: { id: 'flight-1' } }),
-    { batchSize: 2, delayMs: 250 },
+    { batchSize: 8, delayMs: 150 },
   );
   assert.deepEqual(cctvGeometryDrainPacing({ cockpitActive: true }), {
-    batchSize: 2,
-    delayMs: 250,
+    batchSize: 8,
+    delayMs: 150,
   });
 
   const active = { id: 'active' };
@@ -379,8 +381,10 @@ test('geometry drain pacing yields to tracked and cockpit camera ownership', () 
 
 test('geometry drain rechecks pacing when tracking releases between batches', () => {
   let trackedEntity = { id: 'flight-1' };
-  const queue = Array.from({ length: 10 }, (_, index) => index + 1);
+  const queue = Array.from({ length: 30 }, (_, index) => index + 1);
   const visited = [];
+  const range = (from, to) =>
+    Array.from({ length: to - from + 1 }, (_, index) => from + index);
   const runBatch = () =>
     processCctvGeometryDrainBatch({
       queue,
@@ -391,21 +395,68 @@ test('geometry drain rechecks pacing when tracking releases between batches', ()
     });
 
   const trackedBatch = runBatch();
-  assert.deepEqual(trackedBatch, { hasMore: true, batchSize: 2, delayMs: 250 });
-  assert.deepEqual(visited, [1, 2]);
+  assert.deepEqual(trackedBatch, { hasMore: true, batchSize: 8, delayMs: 150 });
+  assert.deepEqual(visited, range(1, 8));
 
   trackedEntity = null;
   const untrackedBatch = runBatch();
   assert.deepEqual(untrackedBatch, {
     hasMore: true,
-    batchSize: 4,
-    delayMs: 120,
+    batchSize: 16,
+    delayMs: 100,
   });
-  assert.deepEqual(visited, [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(visited, range(1, 24));
 
   assert.match(
     processGeometryBatch.toString(),
     /processCctvGeometryDrainBatch/,
+  );
+});
+
+test('feed-filtered cycling steps only between live or snapshot cameras', () => {
+  const live = (id) => ({ camera: { id, feedType: 'hls' } });
+  const still = (id) => ({ camera: { id, feedType: 'image' } });
+  const fellBack = (id) => ({
+    camera: { id, feedType: 'hls' },
+    projection: { mode: 'image' },
+  });
+  const records = [
+    still('s0'),
+    live('l1'),
+    still('s2'),
+    fellBack('f3'),
+    live('l4'),
+  ];
+  const ids = (feed) =>
+    records
+      .filter((record) => cctvRecordMatchesFeed(record, feed))
+      .map((record) => record.camera.id);
+  assert.deepEqual(ids('live'), ['l1', 'l4']);
+  assert.deepEqual(
+    ids('snapshot'),
+    ['s0', 's2', 'f3'],
+    'a stream that fell back to its still image counts as a snapshot',
+  );
+  assert.deepEqual(ids('all'), ['s0', 'l1', 's2', 'f3', 'l4']);
+
+  const next = (from, feed, step = 1) => {
+    const idx = cctvCycleMatchingIndex(records, from, step, feed);
+    return idx < 0 ? null : records[idx].camera.id;
+  };
+  // From a snapshot camera, NEXT/PREV land on the nearest live camera in
+  // catalog order, never on another snapshot.
+  assert.equal(next(2, 'live'), 'l4');
+  assert.equal(next(2, 'live', -1), 'l1');
+  assert.equal(next(4, 'live'), 'l1', 'wraps around the catalog');
+  assert.equal(next(1, 'live', -1), 'l4');
+  assert.equal(next(-1, 'live'), 'l1', 'no selection: NEXT takes the first');
+  assert.equal(next(-1, 'live', -1), 'l4', 'no selection: PREV takes the last');
+  assert.equal(next(1, 'snapshot'), 's2');
+  assert.equal(next(1, 'live', 2), 'l1', 'a larger step wraps the matches');
+  assert.equal(
+    cctvCycleMatchingIndex([still('a'), still('b')], 0, 1, 'live'),
+    -1,
+    'no matching camera returns -1 instead of looping',
   );
 });
 
@@ -1273,7 +1324,7 @@ test('CCTV null-active coverage, auto-hop, cycling, and panel targets stay hones
     assert.ok(renderer, '_renderCctvState is missing');
     assert.match(
       renderer[0],
-      /else if \(!activeId\)[\s\S]*?selectedIndex = -1/,
+      /_cctvSelect\.value = activeId;\s*\} else \{[\s\S]*?selectedIndex = -1/,
     );
     assert.match(
       renderer[0],

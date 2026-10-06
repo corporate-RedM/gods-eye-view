@@ -33,6 +33,11 @@
         <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
       </div>
       <div class="cctv-controls">
+        <select id="cctv-feed-filter" aria-label="Show live video or snapshot cameras">
+          <option value="all">All feeds</option>
+          <option value="live">Live video</option>
+          <option value="snapshot">Snapshots</option>
+        </select>
         <input
           id="cctv-camera-search"
           type="search"

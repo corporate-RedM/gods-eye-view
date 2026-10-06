@@ -208,6 +208,10 @@ export const DATA_CREDITS = [
     html: 'CCTV live video (Delaware): <a href="https://deldot.gov/map/" target="_blank" rel="noopener">DelDOT — Delaware Department of Transportation</a>',
   },
   {
+    key: 'geonames-cctv-places',
+    html: 'CCTV camera city labels: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0)',
+  },
+  {
     key: 'caltrans-cctv',
     html:
       'CCTV cameras &amp; frames (California): Caltrans — ' +

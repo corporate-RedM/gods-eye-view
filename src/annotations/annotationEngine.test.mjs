@@ -285,7 +285,9 @@ test('retry: HTTP 429 Retry-After 5s gets one ladder-spaced retry; a second 429 
     },
   })
     .finally(() => { settled = true; });
-  while (waits.length === 0) await flushMicrotasks();
+  // A full event-loop turn, not just microtasks: the outline path's bundled
+  // JSON import needs I/O to finish on Node 20 (setImmediate is not mocked).
+  while (waits.length === 0) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(requestTimes.length, 1);
   assert.deepEqual(waits, [8000], 'the 8s ladder floor is longer than Retry-After: 5');
 
@@ -342,7 +344,9 @@ test('retry: a plain HTTP 500 still exhausts the existing 8s/25s transient ladde
     },
   })
     .finally(() => { settled = true; });
-  while (waits.length === 0) await flushMicrotasks();
+  // A full event-loop turn, not just microtasks: the outline path's bundled
+  // JSON import needs I/O to finish on Node 20 (setImmediate is not mocked).
+  while (waits.length === 0) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(requestTimes.length, 1);
   assert.deepEqual(waits, [8000]);
 

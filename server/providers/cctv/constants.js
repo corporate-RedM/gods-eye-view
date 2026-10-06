@@ -11,9 +11,9 @@ export const DEFAULT_AUSTIN_MAX_SOURCES = 250;
  * cap.js) so no region is silently dropped. Sized above the sum of the
  * default per-pack caps so a default install never trims.
  */
-export const DEFAULT_CCTV_MAX_SOURCES = 4000;
+export const DEFAULT_CCTV_MAX_SOURCES = 10000;
 /** Hard upper bound for CCTV_MAX_SOURCES; also sizes the health map. */
-export const CCTV_MAX_SOURCES_CEILING = 5000;
+export const CCTV_MAX_SOURCES_CEILING = 10000;
 /** Reference point for Austin camera prioritization (Congress & 6th). */
 export const AUSTIN_DOWNTOWN = { lat: 30.2672, lon: -97.7431 };
 /** Caltrans CCTV: one JSON feed per district, identical schema statewide. */
@@ -105,7 +105,7 @@ export const CALTRANS_CCTV_URL = (district) =>
   `https://cwwp2.dot.ca.gov/data/d${district}/cctv/cctvStatusD${String(district).padStart(2, '0')}.json`;
 /** Districts fetched by default: SF Bay (4), LA (7), San Diego (11), Sacramento (3). */
 export const DEFAULT_CALTRANS_DISTRICTS = '4,7,11,3';
-export const DEFAULT_CALTRANS_MAX_SOURCES = 300;
+export const DEFAULT_CALTRANS_MAX_SOURCES = 2000;
 /** Prioritization anchors: downtown cores of the four default metros. */
 export const CALTRANS_ANCHORS = [
   { lat: 37.7793, lon: -122.4193 }, // San Francisco

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { knownDeadCaltransStreams } from './caltransStreams.js';
 import {
   DEFAULT_AUSTIN_ROWS_URL,
   DEFAULT_AUSTIN_MAX_SOURCES,
@@ -240,6 +241,27 @@ export async function loadCaltransSourcesFromOpenData() {
       // Official-host pin (see JSDoc). Also drops records with no still image.
       if (!imageUrl.startsWith('https://cwwp2.dot.ca.gov/')) continue;
 
+      // Most cameras also publish a Wowza HLS stream. Pinned to the official
+      // media host like the image URL; anything else stays a still camera.
+      // Some published streams 404 — the still image remains the fallback.
+      let streamUrl = '';
+      try {
+        const stream = new URL(
+          String(cctv.imageData?.streamingVideoURL || '').trim(),
+        );
+        if (
+          stream.origin === 'https://wzmedia.dot.ca.gov' &&
+          !stream.username &&
+          !stream.password &&
+          /^\/D\d{1,2}\/[A-Za-z0-9_.-]+\.stream\/playlist\.m3u8$/.test(
+            stream.pathname,
+          )
+        )
+          streamUrl = stream.href;
+      } catch {
+        /* No stream published — still camera. */
+      }
+
       const locationName = String(loc.locationName || '').trim();
       // Leading token of locationName is the stable camera code ("TV102 -- I-580 : …").
       const codeMatch = /^([A-Za-z0-9_-]+)\s*--/.exec(locationName);
@@ -284,8 +306,8 @@ export async function loadCaltransSourcesFromOpenData() {
             ? Math.max(-100, Math.min(4000, ft * 0.3048))
             : 150;
         })(),
-        feedType: 'image',
-        url: imageUrl,
+        feedType: streamUrl ? 'hls' : 'image',
+        url: streamUrl || imageUrl,
         snapshotUrl: imageUrl,
         sourceKind: 'caltrans-open-data',
         license: 'Public Caltrans highway camera frame',
@@ -293,11 +315,24 @@ export async function loadCaltransSourcesFromOpenData() {
     }
   }
 
+  // Dead stream links (see caltransStreams.js) are dropped; the camera keeps
+  // its still image.
+  const deadStreams = await knownDeadCaltransStreams(
+    cameras
+      .filter((camera) => camera.feedType === 'hls')
+      .map((camera) => camera.url),
+  );
+  for (const camera of cameras) {
+    if (camera.feedType !== 'hls' || !deadStreams.has(camera.url)) continue;
+    camera.feedType = 'image';
+    camera.url = camera.snapshotUrl;
+  }
+
   const maxRaw = Number(
     process.env.CCTV_CALTRANS_MAX_SOURCES || DEFAULT_CALTRANS_MAX_SOURCES,
   );
   const maxCount = Number.isFinite(maxRaw)
-    ? Math.max(8, Math.min(600, Math.floor(maxRaw)))
+    ? Math.max(8, Math.min(2000, Math.floor(maxRaw)))
     : DEFAULT_CALTRANS_MAX_SOURCES;
   const prioritized = prioritizeSources(cameras, maxCount, CALTRANS_ANCHORS);
   console.log(

@@ -22,7 +22,9 @@ const REGION_BY_CITY_ID = [
 /** The pack's region for a camera, or '' when the pack is unknown. */
 export function cameraRegion(camera) {
   const id = String(camera?.cityId || '').toLowerCase();
-  const hit = REGION_BY_CITY_ID.find(([key]) => id === key || id.startsWith(key));
+  const hit = REGION_BY_CITY_ID.find(
+    ([key]) => id === key || id.startsWith(key),
+  );
   return hit ? hit[1] : '';
 }
 

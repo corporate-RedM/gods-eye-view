@@ -55,21 +55,40 @@ export function _renderCctvState(state) {
   }
 
   if (this._cctvSelect) {
-    const shouldRebuild =
-      this._cctvSelect.options.length !== cameras.length ||
-      cameras.some(
-        (cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id,
-      );
-    if (shouldRebuild) {
+    // The feed filter (All feeds / Live video / Snapshots) narrows the dropdown
+    // and the search suggestions to cameras of that feed type only.
+    const feedFilter = this._cctvFeedFilter?.value || 'all';
+    const matchesFilter = (cam) =>
+      feedFilter === 'all' || (feedFilter === 'live') === !!cam.isVideo;
+    const listed = cameras.filter(matchesFilter);
+    // isVideo is part of the signature: a stream that falls back to its still
+    // image moves the camera from Live video to Snapshots.
+    const signature = `${feedFilter}|${listed
+      .map((cam) => (cam.isVideo ? `${cam.id}+` : cam.id))
+      .join(',')}`;
+    if (signature !== this._cctvListSignature) {
+      this._cctvListSignature = signature;
+      if (this._cctvFeedFilter) {
+        const live = cameras.filter((cam) => cam.isVideo).length;
+        const counts = {
+          all: cameras.length,
+          live,
+          snapshot: cameras.length - live,
+        };
+        for (const option of this._cctvFeedFilter.options) {
+          const base = option.textContent.replace(/ \([\d,]+\)$/, '');
+          option.textContent = `${base} (${counts[option.value].toLocaleString()})`;
+        }
+      }
       this._cctvSelect.innerHTML = '';
       // The search box suggests these same labels; duplicate labels get the
       // camera id appended so every suggestion resolves to exactly one camera.
       this._cctvSearchIds = new Map();
       if (this._cctvSearchOptions) this._cctvSearchOptions.innerHTML = '';
-      for (const camera of cameras) {
+      for (const camera of listed) {
         const option = document.createElement('option');
         option.value = camera.id;
-        option.textContent = `${camera.city} · ${camera.name}`;
+        option.textContent = `${camera.city} · ${camera.name}${camera.isVideo ? ' · LIVE' : ''}`;
         this._cctvSelect.appendChild(option);
         let searchLabel = option.textContent;
         if (this._cctvSearchIds.has(searchLabel))
@@ -84,12 +103,16 @@ export function _renderCctvState(state) {
     }
     this._cctvSelect.disabled = !enabled || cameras.length === 0;
     if (this._cctvSearch) this._cctvSearch.disabled = this._cctvSelect.disabled;
+    if (this._cctvFeedFilter)
+      this._cctvFeedFilter.disabled = this._cctvSelect.disabled;
     if (
       activeId &&
       Array.from(this._cctvSelect.options).some((opt) => opt.value === activeId)
     ) {
       this._cctvSelect.value = activeId;
-    } else if (!activeId) {
+    } else {
+      // No active camera, or one outside the feed filter: show no selection
+      // rather than a listed camera that is not the one playing.
       this._cctvSelect.selectedIndex = -1;
     }
   }

@@ -318,16 +318,31 @@ export function createControls({ state: layerState, services, parts, source }) {
      * @param {Object} [options={}]
      * @param {boolean} [options.focus] - If true, fly to the new camera.
      * @param {number} [options.durationSec] - Fly-to duration in seconds.
-     * @returns {string|null} The newly active camera ID, or null if catalog is empty.
+     * @param {string} [options.feed] - 'live' or 'snapshot' to step only between
+     *   cameras of that feed type (the panel's feed filter).
+     * @returns {string|null} The newly active camera ID, or null if catalog is empty
+     *   or no camera matches the feed filter.
      */
     cycleCamera(step = 1, options = {}) {
       if (!layerState._records.length) return null;
       const current = parts.selection.getActiveRecord();
-      const nextIdx = parts.navigation.cctvCycleIndex(
-        layerState._records.findIndex((record) => record === current),
-        step,
-        layerState._records.length,
+      const currentIdx = layerState._records.findIndex(
+        (record) => record === current,
       );
+      const filtered = options.feed === 'live' || options.feed === 'snapshot';
+      const nextIdx = filtered
+        ? parts.navigation.cctvCycleMatchingIndex(
+            layerState._records,
+            currentIdx,
+            step,
+            options.feed,
+          )
+        : parts.navigation.cctvCycleIndex(
+            currentIdx,
+            step,
+            layerState._records.length,
+          );
+      if (nextIdx < 0) return null;
       const nextId = layerState._records[nextIdx].camera.id;
       parts.selection.setActiveCamera(nextId);
       if (options.focus) {
@@ -341,10 +356,12 @@ export function createControls({ state: layerState, services, parts, source }) {
      * @param {Object} [options={}]
      * @param {boolean} [options.focus=true] Whether to fly after selection.
      * @param {number} [options.durationSec] - Fly-to duration in seconds.
+     * @param {string} [options.feed] - 'live' or 'snapshot' to pick the nearest
+     *   camera of that feed type (the panel's feed filter).
      * @returns {string|null} The nearest camera ID, or null if none found.
      */
     focusNearest(options = {}) {
-      const nearest = parts.navigation.nearestCameraIdToViewer();
+      const nearest = parts.navigation.nearestCameraIdToViewer(options.feed);
       if (!nearest) return null;
       parts.selection.setActiveCamera(nearest);
       if (options.focus !== false) {

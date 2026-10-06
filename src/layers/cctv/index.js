@@ -110,6 +110,8 @@ export function createCctvLayer({ services, source }) {
       focusCctvRecord: parts.navigation.focusCctvRecord,
       maybeAutoHop: parts.navigation.maybeAutoHop,
       cctvCycleIndex: parts.navigation.cctvCycleIndex,
+      cctvCycleMatchingIndex: parts.navigation.cctvCycleMatchingIndex,
+      cctvRecordMatchesFeed: parts.navigation.recordMatchesFeed,
     },
   );
 }

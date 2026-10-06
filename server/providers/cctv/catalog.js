@@ -4,6 +4,7 @@ import { DEFAULT_CCTV_SOURCE_FILE, CCTV_SOURCE_CACHE_MS } from './constants.js';
 import { allocateSourceCap, resolveCatalogCap } from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
 import { normalizeSourceItem } from './normalize.js';
+import { labelPackCities } from './places.js';
 import {
   loadAustinSourcesFromOpenData,
   loadCaltransSourcesFromOpenData,
@@ -207,10 +208,14 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
     // keeps its own priority order and the catalog cap is shared fairly.
     const normalizePack = (name, items) => ({
       name,
-      sources: items
-        .filter((item) => item && typeof item === 'object')
-        .map((item) => normalizeSourceItem(item))
-        .filter((item) => item.id),
+      sources: labelPackCities(
+        name,
+        items
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => normalizeSourceItem(item))
+          .filter((item) => item.id),
+        sourceRoot,
+      ),
     });
     const packs = [
       ...LIVE_PACKS.map((pack, index) =>

@@ -1,6 +1,10 @@
 export function _initCctvPanel() {
   if (!this._cctvPanel) return;
 
+  // NEAREST / PREV / NEXT stay within the feed filter (All feeds / Live video
+  // / Snapshots), matching what the dropdown and search list.
+  const feedFilter = () => this._cctvFeedFilter?.value || 'all';
+
   this.listen(this._cctvEnableBtn, 'click', async () => {
     this._actionGeneration++;
     await this.actions.toggleEnabled();
@@ -18,7 +22,7 @@ export function _initCctvPanel() {
     )
       return;
     this.actions.runExplicitFocus(
-      () => this.cctv.focusNearest({ focus: false }),
+      () => this.cctv.focusNearest({ focus: false, feed: feedFilter() }),
       (cameraId) => this.cctv.focusCamera(cameraId, 1.8),
     );
   });
@@ -35,7 +39,7 @@ export function _initCctvPanel() {
     )
       return;
     this.actions.runExplicitFocus(
-      () => this.cctv.cycleCamera(-1),
+      () => this.cctv.cycleCamera(-1, { feed: feedFilter() }),
       (cameraId) => this.cctv.focusCamera(cameraId, 1.4),
     );
   });
@@ -52,7 +56,7 @@ export function _initCctvPanel() {
     )
       return;
     this.actions.runExplicitFocus(
-      () => this.cctv.cycleCamera(1),
+      () => this.cctv.cycleCamera(1, { feed: feedFilter() }),
       (cameraId) => this.cctv.focusCamera(cameraId, 1.4),
     );
   });
@@ -90,6 +94,23 @@ export function _initCctvPanel() {
     }
     if (!this._cctvState?.activeCameraId) return;
     this._cctvFrameWrap?.requestFullscreen?.().catch(() => {});
+  });
+
+  // Switching between All feeds / Live video / Snapshots re-lists the cameras
+  // and clears a half-typed search for the previous list. When the camera on
+  // screen is not of the chosen type, fly to the nearest camera that is.
+  this.listen(this._cctvFeedFilter, 'change', () => {
+    if (this._cctvSearch) this._cctvSearch.value = '';
+    this._renderCctvState(this._cctvState);
+    const feed = feedFilter();
+    if (feed === 'all' || !this.actions.isEnabled()) return;
+    const active = this._cctvState?.activeCamera;
+    if (active && (feed === 'live') === !!active.isVideo) return;
+    this._actionGeneration++;
+    this.actions.runExplicitFocus(
+      () => this.cctv.focusNearest({ focus: false, feed }),
+      (cameraId) => this.cctv.focusCamera(cameraId, 1.8),
+    );
   });
 
   // Picking a search suggestion (or pressing Enter on an exact label) selects
