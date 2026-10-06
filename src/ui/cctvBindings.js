@@ -80,6 +80,18 @@ export function _initCctvPanel() {
     this.actions.setParams({ selectedCameraId: cameraId }, { origin: 'user' });
   });
 
+  // Double-click the feed to maximize it like a CCTV monitor; double-click
+  // again or press Esc to return. Covers both the snapshot image and the
+  // live-video canvas because both live inside the frame wrap.
+  this.listen(this._cctvFrameWrap, 'dblclick', () => {
+    if (document.fullscreenElement === this._cctvFrameWrap) {
+      document.exitFullscreen?.();
+      return;
+    }
+    if (!this._cctvState?.activeCameraId) return;
+    this._cctvFrameWrap?.requestFullscreen?.().catch(() => {});
+  });
+
   // Picking a search suggestion (or pressing Enter on an exact label) selects
   // that camera through the dropdown's own change path, then clears the box.
   this.listen(this._cctvSearch, 'change', () => {
