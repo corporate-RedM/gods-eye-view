@@ -18,6 +18,8 @@ import {
 } from './cctv/constants.js';
 import { sanitizeCctvRangeHeader } from './cctv/range.js';
 import { createHlsPuller } from './cctv/stream.js';
+import { createCctvWatch } from './cctv/watch/index.js';
+import { handleWatchRoute } from './cctv/watch/routes.js';
 import { googleServerApiKey } from './places/google-key.js';
 export { CCTV_FRAME_FETCH_TIMEOUT_MS, fetchCctvImageFromUpstream };
 /**
@@ -30,6 +32,7 @@ export { CCTV_FRAME_FETCH_TIMEOUT_MS, fetchCctvImageFromUpstream };
  *   GET /api/cctv/stream/:id     — stream info (feedType, URLs) for a camera
  *   GET /api/cctv/media/:id      — proxy live video/image media from upstream
  *   GET /api/cctv/frame/:id      — single frame with fallback chain
+ *   /api/cctv/watch/...          — CCTV Watch state and controls (./cctv/watch/routes.js)
  *
  * @returns {import('vite').Plugin}
  */
@@ -43,6 +46,16 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
   const HEALTH_MAX_ENTRIES = CCTV_MAX_SOURCES_CEILING;
   /** Live HLS strategies (see ./cctv/stream.js). Shared across dev and preview. */
   const puller = createHlsPuller();
+  /**
+   * CCTV Watch reads this proxy's own catalog instance, so watching never
+   * fetches the upstream camera catalogs a second time. It does nothing until
+   * the app asks it to watch.
+   */
+  const watch = createCctvWatch({
+    root: sourceRoot,
+    getSources: getCctvSources,
+    fetchStill: (source) => fetchCctvImageFromUpstream(source.snapshotUrl),
+  });
 
   /** Update the health entry for a camera, evicting the oldest entry if at capacity. */
   const setHealth = (cameraId, patch) => {
@@ -132,9 +145,15 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
   const installMiddleware = (server) => {
     server.httpServer?.on('close', () => {
       puller.shutdown();
+      watch.dispose();
     });
     server.middlewares.use('/api/cctv', async (req, res) => {
       try {
+        const requestUrl = new URL(req.url || '/', 'http://localhost');
+        if (requestUrl.pathname.startsWith('/watch/')) {
+          await handleWatchRoute(watch, req, res, requestUrl);
+          return;
+        }
         const sources = await getCctvSources();
         const sourceById = new Map(
           sources.map((source) => [source.id, source]),

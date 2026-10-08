@@ -1,0 +1,804 @@
+{
+  "version": 1,
+  "notes": "CCTV Watch event definitions. Observations are what a camera can directly show; causes are explanations that need support. Adding a type means adding an entry here. Screening and confirmation thresholds live in cctv_watch_thresholds.json. persistence says how fast a condition can genuinely change: lasting (the default for still evidence) cannot vanish within a couple of minutes, so a better look at the same moment that finds nothing rules the sighting out; transient (the default for motion and clip evidence) can, so contrary evidence only ends it. A report's agrees list names the observations an official report of that kind describes.",
+  "screening": {
+    "notes": "Each type's screening score is how much more a frame looks like that type's phrases than like the closest of these ordinary scenes (BK's gate review, 2026-10-07). Phrases describe what is visible, never an interpretation such as a crash.",
+    "neutral": [
+      "an ordinary road with normal traffic",
+      "an empty road",
+      "a highway at night with car headlights and tail lights",
+      "a city intersection on a normal day",
+      "a foggy or hazy sky above a road",
+      "a road with wet pavement after rain"
+    ]
+  },
+  "groups": {
+    "disasters": { "label": "Natural disasters" },
+    "crashes": { "label": "Crashes and traffic" },
+    "fights": { "label": "Fights and disturbances" },
+    "crowds": { "label": "Crowds and public events" },
+    "unusual": { "label": "Unusual activity" }
+  },
+  "observations": {
+    "smoke": {
+      "label": "Smoke",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "any",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "a column of smoke rising from a fire",
+        "thick grey smoke billowing from a fire",
+        "a wildfire smoke plume over hills"
+      ],
+      "describe": "Smoke from a fire. Not fog, haze, dust, steam or vehicle exhaust."
+    },
+    "flames": {
+      "label": "Flames",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "any",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "bright orange flames of a fire",
+        "a building burning with flames",
+        "a brush fire with visible flames"
+      ],
+      "describe": "Visible flames from a fire."
+    },
+    "vehicle_fire": {
+      "label": "Vehicle fire",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "a car on fire",
+        "a burning vehicle with flames and black smoke",
+        "a truck engulfed in flames"
+      ],
+      "describe": "A vehicle that is on fire."
+    },
+    "water_on_road": {
+      "label": "Water across the road",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "a flooded street with cars in deep water",
+        "flood water covering a road",
+        "a car driving through deep flood water"
+      ],
+      "describe": "Standing or flowing water covering part of the roadway. Not just a wet surface or puddles at the edge."
+    },
+    "snow_ice_on_road": {
+      "label": "Snow or ice on the road",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "low",
+      "condition": true,
+      "phrases": [
+        "a road covered in snow",
+        "a snowy highway with snow on the lanes"
+      ],
+      "describe": "Snow or ice covering the road surface in the traffic lanes."
+    },
+    "whiteout": {
+      "label": "Whiteout",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "any",
+      "urgency": "medium",
+      "condition": true,
+      "persistence": "transient",
+      "phrases": [
+        "a whiteout blizzard with blowing snow",
+        "heavy snowfall hiding everything"
+      ],
+      "describe": "Falling or blowing snow so heavy that most of the scene is white."
+    },
+    "low_visibility": {
+      "label": "Low visibility",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "any",
+      "urgency": "low",
+      "condition": true,
+      "persistence": "transient",
+      "phrases": [
+        "dense fog hiding a road",
+        "a road disappearing into thick fog"
+      ],
+      "describe": "The scene itself is hard to see because of fog, heavy rain, smoke or dust in the air. Not a problem with the camera lens."
+    },
+    "debris_on_road": {
+      "label": "Debris on the road",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "boulders lying on a road",
+        "a fallen tree blocking a road",
+        "debris scattered across a road"
+      ],
+      "describe": "Debris, rocks, a fallen tree or other objects lying in the traffic lanes."
+    },
+    "overturned_vehicle": {
+      "label": "Overturned vehicle",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "an overturned car lying on its roof",
+        "a truck tipped over on its side"
+      ],
+      "describe": "A vehicle lying on its side or roof."
+    },
+    "damaged_vehicles": {
+      "label": "Damaged vehicles",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "cars with crumpled, damaged bodies",
+        "two cars smashed into each other",
+        "a wrecked car"
+      ],
+      "describe": "Vehicles with visible crash damage, or vehicles touching each other the way they do after a collision."
+    },
+    "vehicle_off_road": {
+      "label": "Vehicle off the road",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "a car sitting in a ditch beside the road",
+        "a car that left the road and is stuck in the grass"
+      ],
+      "describe": "A vehicle off the paved road in a ditch, median or embankment. Not a vehicle in a parking area or on a shoulder."
+    },
+    "work_zone": {
+      "label": "Work zone",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "low",
+      "condition": false,
+      "phrases": [
+        "a highway work zone with orange drums and cones",
+        "road construction with workers and equipment"
+      ],
+      "describe": "Road work: orange drums, cones, barriers, arrow boards, construction equipment or workers in vests. Not a crash and not an emergency response."
+    },
+    "vehicle_stopped_on_shoulder": {
+      "label": "Vehicle stopped on the shoulder",
+      "group": "crashes",
+      "evidence": "motion",
+      "scene": "road",
+      "urgency": "low",
+      "condition": true,
+      "phrases": [
+        "a car stopped on the shoulder of a highway",
+        "a vehicle pulled over at the side of the road"
+      ],
+      "describe": "A vehicle standing still on the paved shoulder beside the traffic lanes, with no other vehicles queued behind it."
+    },
+    "vehicle_stopped_in_lane": {
+      "label": "Vehicle stopped in a lane",
+      "group": "crashes",
+      "evidence": "motion",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "a vehicle stopped across a traffic lane",
+        "a car stopped in the middle of the road while traffic goes around it"
+      ],
+      "describe": "A single vehicle standing still in a traffic lane while other traffic moves around it. Not vehicles queued in stopped traffic or waiting at a signal."
+    },
+    "emergency_response": {
+      "label": "Emergency response on scene",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "police cars and a fire truck with flashing lights stopped on a road",
+        "an ambulance and firefighters standing on a road"
+      ],
+      "describe": "Police, fire or ambulance vehicles stopped at a scene, or flares and cones set out by responders."
+    },
+    "structural_damage": {
+      "label": "Structural damage",
+      "group": "disasters",
+      "evidence": "still",
+      "scene": "any",
+      "urgency": "high",
+      "condition": true,
+      "phrases": [
+        "a collapsed building",
+        "a destroyed building after a disaster"
+      ],
+      "describe": "A collapsed or visibly damaged building, bridge, sign structure or wall."
+    },
+    "people_on_roadway": {
+      "label": "People on the roadway",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "persistence": "transient",
+      "phrases": ["people walking in the lanes of a highway"],
+      "describe": "People on foot in traffic lanes. Not on sidewalks, crosswalks or shoulders."
+    },
+    "crowd": {
+      "label": "Crowd",
+      "group": "crowds",
+      "evidence": "still",
+      "scene": "pedestrian",
+      "urgency": "low",
+      "condition": true,
+      "persistence": "transient",
+      "measure": "crowd",
+      "phrases": ["a large crowd of people", "a dense crowd filling a street"],
+      "describe": "People gathered together. Give an approximate count and the density: sparse, moderate, dense or packed."
+    },
+    "stage_tents_barriers": {
+      "label": "Stage, tents or barriers",
+      "group": "crowds",
+      "evidence": "still",
+      "scene": "pedestrian",
+      "urgency": "low",
+      "condition": true,
+      "phrases": [
+        "a street festival with tents and booths",
+        "crowd control barriers along a street"
+      ],
+      "describe": "Event infrastructure: a stage, tents, booths or crowd barriers."
+    },
+    "traffic_stopped": {
+      "label": "Traffic stopped",
+      "group": "crashes",
+      "evidence": "motion",
+      "scene": "road",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "a traffic jam with cars at a standstill",
+        "a long line of stopped cars"
+      ],
+      "describe": "Vehicles in the traffic lanes do not move between the frames."
+    },
+    "traffic_slow": {
+      "label": "Traffic slow",
+      "group": "crashes",
+      "evidence": "motion",
+      "scene": "road",
+      "urgency": "low",
+      "condition": true,
+      "phrases": [],
+      "describe": "Vehicles move between the frames, but slowly and closely spaced."
+    },
+    "traffic_flowing": {
+      "label": "Traffic flowing",
+      "group": "crashes",
+      "evidence": "motion",
+      "scene": "road",
+      "urgency": "low",
+      "condition": false,
+      "ends": ["traffic_stopped", "traffic_slow"],
+      "phrases": [],
+      "describe": "Vehicles move normally between the frames."
+    },
+    "road_clear": {
+      "label": "Road clear",
+      "group": "crashes",
+      "evidence": "still",
+      "scene": "road",
+      "urgency": "low",
+      "condition": false,
+      "ends": [
+        "debris_on_road",
+        "overturned_vehicle",
+        "damaged_vehicles",
+        "vehicle_off_road",
+        "vehicle_fire",
+        "emergency_response",
+        "people_on_roadway"
+      ],
+      "phrases": [],
+      "describe": "The traffic lanes in view are clear of debris, wrecked or stopped vehicles, and responders."
+    },
+    "people_running": {
+      "label": "People running or scattering",
+      "group": "fights",
+      "evidence": "clip",
+      "scene": "pedestrian",
+      "urgency": "medium",
+      "condition": true,
+      "phrases": [
+        "several people running across a street",
+        "a crowd scattering"
+      ],
+      "describe": "Several people running or scattering across the frames."
+    },
+    "physical_altercation": {
+      "label": "Physical altercation",
+      "group": "fights",
+      "evidence": "clip",
+      "scene": "people",
+      "urgency": "high",
+      "condition": true,
+      "phrases": ["people fighting", "a person punching another person"],
+      "describe": "People hitting, grappling with or attacking each other across the frames."
+    }
+  },
+  "causes": {
+    "crash": {
+      "label": "crash",
+      "group": "crashes",
+      "urgency": "high",
+      "support": [
+        { "observation": "overturned_vehicle", "weight": "strong" },
+        { "observation": "damaged_vehicles", "weight": "strong" },
+        {
+          "allOf": ["debris_on_road", "traffic_stopped"],
+          "weight": "moderate"
+        },
+        { "report": "crash", "weight": "strong" }
+      ],
+      "neverAlone": [
+        "vehicle_fire",
+        "traffic_stopped",
+        "traffic_slow",
+        "emergency_response",
+        "debris_on_road"
+      ]
+    },
+    "disturbance": {
+      "label": "disturbance",
+      "group": "fights",
+      "urgency": "high",
+      "support": [
+        { "observation": "physical_altercation", "weight": "strong" },
+        { "report": "disturbance", "weight": "strong" }
+      ],
+      "neverAlone": ["crowd", "people_running"],
+      "alternatives": [
+        { "context": "scheduled_event", "label": "scheduled event nearby" }
+      ]
+    },
+    "severe_weather": {
+      "label": "severe weather",
+      "group": "disasters",
+      "urgency": "medium",
+      "support": [
+        {
+          "allOf": ["report:weather_warning", "whiteout"],
+          "weight": "strong"
+        },
+        {
+          "allOf": ["report:weather_warning", "snow_ice_on_road"],
+          "weight": "moderate"
+        }
+      ],
+      "neverAlone": ["low_visibility", "report:weather_warning"]
+    },
+    "wildfire": {
+      "label": "wildfire",
+      "group": "disasters",
+      "urgency": "high",
+      "support": [
+        { "report": "fire", "weight": "strong" },
+        { "observation": "smoke", "cameras": 2, "weight": "moderate" }
+      ],
+      "neverAlone": ["low_visibility"]
+    },
+    "flood": {
+      "label": "flood",
+      "group": "disasters",
+      "urgency": "high",
+      "support": [
+        {
+          "allOf": ["water_on_road", "report:weather_warning"],
+          "weight": "strong"
+        },
+        { "allOf": ["water_on_road", "report:flood"], "weight": "strong" }
+      ],
+      "neverAlone": ["report:weather_warning"]
+    },
+    "landslide": {
+      "label": "landslide",
+      "group": "disasters",
+      "urgency": "high",
+      "support": [
+        { "allOf": ["debris_on_road", "report:hazard"], "weight": "strong" },
+        {
+          "allOf": ["debris_on_road", "profile:slope"],
+          "weight": "moderate"
+        }
+      ],
+      "neverAlone": ["debris_on_road"]
+    },
+    "earthquake_damage": {
+      "label": "earthquake damage",
+      "group": "disasters",
+      "urgency": "high",
+      "support": [
+        {
+          "allOf": ["report:earthquake", "structural_damage"],
+          "weight": "strong"
+        },
+        {
+          "allOf": ["report:earthquake", "debris_on_road"],
+          "weight": "moderate"
+        }
+      ],
+      "neverAlone": ["report:earthquake"]
+    },
+    "public_event": {
+      "label": "public event",
+      "group": "crowds",
+      "urgency": "low",
+      "support": [
+        { "allOf": ["crowd", "stage_tents_barriers"], "weight": "strong" },
+        { "allOf": ["crowd", "context:scheduled_event"], "weight": "moderate" }
+      ],
+      "neverAlone": ["crowd", "context:scheduled_event"]
+    }
+  },
+  "reports": {
+    "crash": {
+      "label": "Crash reported",
+      "group": "crashes",
+      "role": "evidence",
+      "urgency": "high",
+      "agrees": ["damaged_vehicles", "overturned_vehicle", "vehicle_off_road"]
+    },
+    "incident": {
+      "label": "Incident reported",
+      "group": "crashes",
+      "role": "evidence",
+      "urgency": "low"
+    },
+    "closure": {
+      "label": "Closure reported",
+      "group": "crashes",
+      "role": "context"
+    },
+    "hazard": {
+      "label": "Road hazard reported",
+      "group": "crashes",
+      "role": "evidence",
+      "urgency": "medium",
+      "agrees": ["debris_on_road"]
+    },
+    "disturbance": {
+      "label": "Disturbance reported",
+      "group": "fights",
+      "role": "evidence",
+      "urgency": "high",
+      "agrees": ["physical_altercation"]
+    },
+    "fire": {
+      "label": "Fire reported",
+      "group": "disasters",
+      "role": "evidence",
+      "urgency": "high",
+      "agrees": ["smoke", "flames", "vehicle_fire"]
+    },
+    "flood": {
+      "label": "Flooding reported",
+      "group": "disasters",
+      "role": "evidence",
+      "urgency": "medium",
+      "agrees": ["water_on_road"]
+    },
+    "earthquake": {
+      "label": "Earthquake reported",
+      "group": "disasters",
+      "role": "evidence",
+      "urgency": "high"
+    },
+    "weather_warning": {
+      "label": "Weather warning",
+      "group": "disasters",
+      "role": "context"
+    },
+    "special_event": {
+      "label": "Special event listed",
+      "group": "crowds",
+      "role": "context"
+    }
+  },
+  "links": {
+    "crashes": {
+      "radiusKm": 2,
+      "windowMin": 60,
+      "compatible": ["crashes", "disasters"]
+    },
+    "disasters": {
+      "radiusKm": 15,
+      "windowMin": 180,
+      "compatible": ["disasters", "crashes"]
+    },
+    "fights": {
+      "radiusKm": 0.5,
+      "windowMin": 30,
+      "compatible": ["fights", "crowds"]
+    },
+    "crowds": {
+      "radiusKm": 0.5,
+      "windowMin": 120,
+      "compatible": ["crowds", "fights"]
+    },
+    "unusual": { "radiusKm": 0.5, "windowMin": 60, "compatible": [] }
+  },
+  "verify": {
+    "smoke": {
+      "question": "What is the hazy, grey or dark area in the close-up?",
+      "sequenceNote": "Smoke drifts and changes shape between frames; a mark on the lens stays at exactly the same place in every frame.",
+      "sceneQuestion": "What is the hazy, grey or dark patch in the area in question?",
+      "sequence": true,
+      "answers": {
+        "smoke_from_a_fire": "present",
+        "fog_haze_or_cloud": "absent",
+        "steam_or_exhaust": "absent",
+        "dust": "absent",
+        "mark_on_the_lens": "absent",
+        "shadow_or_dark_object": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "flames": {
+      "question": "Is there fire with visible flames in the close-up, or something bright that is not fire?",
+      "sceneQuestion": "Is there fire with visible flames in the area in question, or something bright that is not fire?",
+      "sequence": true,
+      "answers": {
+        "flames": "present",
+        "vehicle_or_street_lights": "absent",
+        "reflection_or_glare": "absent",
+        "sunset_or_sky": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "vehicle_fire": {
+      "question": "Is the vehicle in the close-up on fire? Tail lights, brake lights, hazard lights and emergency lights are not fire.",
+      "sceneQuestion": "Is the vehicle in the area in question on fire? Tail lights, brake lights, hazard lights and emergency lights are not fire.",
+      "sequence": true,
+      "answers": {
+        "flames_on_the_vehicle": "present",
+        "smoke_from_the_vehicle_without_flames": "unclear",
+        "vehicle_lights": "absent",
+        "reflection_or_glare": "absent",
+        "no_vehicle_on_fire": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "overturned_vehicle": {
+      "question": "How is the vehicle in the close-up lying: on its side, on its roof, or upright on its wheels?",
+      "sceneQuestion": "How is the vehicle in the area in question lying: on its side, on its roof, or upright on its wheels?",
+      "sequence": false,
+      "answers": {
+        "on_its_side": "present",
+        "on_its_roof": "present",
+        "upright_on_its_wheels": "absent",
+        "not_a_vehicle": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "damaged_vehicles": {
+      "question": "Do the vehicles in the close-up show crash damage (crumpled or torn body, broken parts, pieces on the road), or are two vehicles touching each other?",
+      "sceneQuestion": "Do the vehicles in the area in question show crash damage (crumpled or torn body, broken parts, pieces on the road), or are two vehicles touching each other?",
+      "sequence": false,
+      "answers": {
+        "visible_crash_damage": "present",
+        "vehicles_touching": "present",
+        "no_visible_damage": "absent",
+        "too_small_to_judge": "unclear"
+      }
+    },
+    "vehicle_off_road": {
+      "question": "Where is the vehicle in the close-up?",
+      "sceneQuestion": "Where is the vehicle in the area in question?",
+      "sequence": false,
+      "answers": {
+        "off_the_pavement_in_grass_ditch_or_median": "present",
+        "on_the_paved_shoulder": "absent",
+        "in_a_traffic_lane": "absent",
+        "in_a_parking_area_or_driveway": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "vehicle_stopped_on_shoulder": {
+      "question": "Where is the vehicle in the close-up, and does it stay in the same place in every frame?",
+      "needsFrames": true,
+      "sequence": true,
+      "answers": {
+        "stopped_on_the_shoulder": "present",
+        "on_the_shoulder_and_moving": "absent",
+        "in_a_traffic_lane": "absent",
+        "off_the_pavement": "absent",
+        "on_the_shoulder_but_only_one_frame": "unclear",
+        "cannot_tell": "unclear"
+      }
+    },
+    "vehicle_stopped_in_lane": {
+      "question": "Is the vehicle in the close-up standing still in a traffic lane while other traffic moves past it?",
+      "needsFrames": true,
+      "sequence": true,
+      "answers": {
+        "stopped_alone_in_a_lane": "present",
+        "queued_in_stopped_traffic_or_at_a_signal": "absent",
+        "moving": "absent",
+        "on_the_shoulder": "absent",
+        "only_one_frame": "unclear",
+        "cannot_tell": "unclear"
+      }
+    },
+    "emergency_response": {
+      "question": "What vehicles or equipment are in the close-up?",
+      "sceneQuestion": "What vehicles or equipment are in the area in question?",
+      "sequence": false,
+      "answers": {
+        "police_fire_or_ambulance_stopped_at_a_scene": "present",
+        "flares_or_cones_set_out_by_responders": "present",
+        "tow_truck_or_road_maintenance_vehicle": "absent",
+        "ordinary_traffic": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "people_on_roadway": {
+      "question": "Where are the people in the close-up, whether standing, walking, kneeling or lying on the ground?",
+      "sceneQuestion": "Where are the people in the area in question, whether standing, walking, kneeling or lying on the ground?",
+      "sequence": false,
+      "answers": {
+        "in_a_traffic_lane": "present",
+        "on_a_sidewalk_or_crosswalk": "absent",
+        "on_the_shoulder_median_or_grass": "absent",
+        "no_people": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "debris_on_road": {
+      "question": "Are there objects lying in the traffic lanes in the close-up?",
+      "sceneQuestion": "Are there objects lying in the traffic lanes in the area in question?",
+      "sequence": false,
+      "answers": {
+        "objects_in_the_lanes": "present",
+        "shadows_markings_or_patches_only": "absent",
+        "objects_beside_the_lanes": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "water_on_road": {
+      "question": "Is water covering part of the traffic lanes in the close-up?",
+      "sceneQuestion": "Is water covering part of the traffic lanes in the area in question?",
+      "sequence": false,
+      "answers": {
+        "water_covering_the_lanes": "present",
+        "only_a_wet_surface_or_puddles_at_the_edge": "absent",
+        "no_water": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "snow_ice_on_road": {
+      "question": "Is snow or ice covering the traffic lanes in the close-up?",
+      "sceneQuestion": "Is snow or ice covering the traffic lanes in the area in question?",
+      "sequence": false,
+      "answers": {
+        "snow_or_ice_on_the_lanes": "present",
+        "snow_only_beside_the_road": "absent",
+        "clear_or_wet_lanes": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "whiteout": {
+      "question": "Is falling or blowing snow hiding most of the scene?",
+      "sceneQuestion": "Is falling or blowing snow hiding most of the scene?",
+      "sequence": false,
+      "answers": {
+        "snow_hides_most_of_the_scene": "present",
+        "light_snow": "absent",
+        "fog_not_snow": "absent",
+        "clear": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "low_visibility": {
+      "question": "What makes the scene hard to see?",
+      "sceneQuestion": "What makes the scene hard to see?",
+      "sequence": false,
+      "answers": {
+        "fog_rain_smoke_or_dust_in_the_air": "present",
+        "a_problem_with_the_camera_lens": "absent",
+        "only_darkness": "absent",
+        "nothing_the_scene_is_clear": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "structural_damage": {
+      "question": "Is the building, bridge or structure in the close-up collapsed or visibly damaged?",
+      "sceneQuestion": "Is the building, bridge or structure in the area in question collapsed or visibly damaged?",
+      "sequence": false,
+      "answers": {
+        "collapsed_or_damaged": "present",
+        "intact": "absent",
+        "under_construction_or_repair": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "crowd": {
+      "question": "How many people are gathered together in the close-up?",
+      "sceneQuestion": "How many people are gathered together in the area in question?",
+      "sequence": false,
+      "answers": {
+        "a_gathered_crowd": "present",
+        "a_few_people": "absent",
+        "no_people": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "stage_tents_barriers": {
+      "question": "What is set up in the close-up?",
+      "sceneQuestion": "What is set up in the area in question?",
+      "sequence": false,
+      "answers": {
+        "a_stage_tents_booths_or_crowd_barriers": "present",
+        "construction_barriers_or_cones": "absent",
+        "nothing_set_up": "absent",
+        "cannot_tell": "unclear"
+      }
+    },
+    "traffic_stopped": {
+      "question": "Across the frames, do the vehicles in the traffic lanes move?",
+      "needsFrames": true,
+      "sequence": true,
+      "answers": {
+        "standing_still": "present",
+        "moving_slowly": "absent",
+        "moving_normally": "absent",
+        "only_one_frame": "unclear",
+        "cannot_tell": "unclear"
+      }
+    },
+    "people_running": {
+      "question": "Across the frames, are several people running or scattering?",
+      "needsFrames": true,
+      "sequence": true,
+      "answers": {
+        "running_or_scattering": "present",
+        "walking_normally": "absent",
+        "only_one_frame": "unclear",
+        "cannot_tell": "unclear"
+      }
+    },
+    "physical_altercation": {
+      "question": "Across the frames, are people hitting, grappling with or attacking each other?",
+      "needsFrames": true,
+      "sequence": true,
+      "answers": {
+        "hitting_grappling_or_attacking": "present",
+        "ordinary_movement_or_contact": "absent",
+        "only_one_frame": "unclear",
+        "cannot_tell": "unclear"
+      }
+    }
+  }
+}

@@ -33,6 +33,7 @@ import * as Cesium from 'cesium';
 import { aircraftTrackingTarget } from '../cockpitTracking.js';
 
 import { ShellFeedback } from './shellFeedback.js';
+import { createAiWatchControls } from './aiWatch.js';
 
 import { runCctvLayerEnableTransition } from '../cctvFocusPolicy.js';
 
@@ -574,6 +575,7 @@ export class StyleManager extends ShellFacade {
     this._initShareButton();
     this._initCameraOrientationControls();
     this._initClearSelectedLayersButton();
+    this._initAiWatchControls();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._applyGlobalPostDefaults();
@@ -1402,6 +1404,16 @@ export class StyleManager extends ShellFacade {
   }
 
   /** Wire the top-center action that clears only manager-owned data layers. */
+  /** AI Watch: Start/Stop, area picker and notifications; never moves the view. */
+  _initAiWatchControls() {
+    this._aiWatchControls?.destroy();
+    this._aiWatchControls = createAiWatchControls({
+      // Only ever BK's click on a notification's "View camera".
+      onViewCamera: (cameraId) => this._cctvControls?.viewCamera(cameraId),
+    });
+    this._aiWatchControls.start();
+  }
+
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
     this._clearLayersControl?.destroy();
@@ -1535,6 +1547,7 @@ export class StyleManager extends ShellFacade {
     this._mapSourceControls?.destroy();
     this._cameraOrientationControls?.destroy();
     this._clearLayersControl?.destroy();
+    this._aiWatchControls?.destroy();
     this._cctvControls?.destroy();
     this._radioControls?.destroy();
     this._localSdrControls?.destroy();

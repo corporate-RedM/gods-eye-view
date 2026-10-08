@@ -22,6 +22,11 @@ test('explicit build inputs preserve browser-only defines, plugin order and loop
   ]);
   assert.ok(config.server.fs.deny.includes('**/ENVIRONMENT'));
   assert.ok(config.server.fs.deny.includes('.env.*'));
+  assert.ok(config.server.fs.deny.includes('**/tools/cctv-detector/**'));
+  assert.ok(config.server.fs.deny.includes('**/output/cctv-evidence/**'));
+  assert.ok(
+    config.server.watch.ignored.includes('**/tools/cctv-detector/venv/**'),
+  );
   assert.equal(config.server.headers['X-Frame-Options'], 'DENY');
   assert.equal(
     config.server.headers['Content-Security-Policy'],

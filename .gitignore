@@ -17,5 +17,8 @@ output/
 .DS_Store
 .gstack/
 3d-models/
+tools/cctv-detector/models/
+tools/cctv-detector/venv/
+tools/cctv-detector/__pycache__/
 pinokio/ENVIRONMENT
 pinokio/.installed

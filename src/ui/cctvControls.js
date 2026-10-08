@@ -61,6 +61,24 @@ export class CctvControls {
   getState() {
     return this._cctvState;
   }
+  /**
+   * Open one camera and fly to it, exactly as choosing it from the dropdown
+   * does. For BK's click on "View camera" in an AI Watch notification; AI
+   * Watch never calls this on its own (BK, 2026-10-08).
+   * @param {string} cameraId
+   */
+  async viewCamera(cameraId) {
+    if (typeof cameraId !== 'string' || !cameraId) return false;
+    const generation = ++this._actionGeneration;
+    if (!(await this.actions.toggleEnabled(true))) return false;
+    if (this.destroyed || generation !== this._actionGeneration) return false;
+    this.actions.runExplicitFocus(
+      () => (this.cctv.selectCamera(cameraId) ? cameraId : null),
+      (selectedId) => this.cctv.focusCamera(selectedId, 2.2),
+    );
+    this.actions.setParams({ selectedCameraId: cameraId }, { origin: 'user' });
+    return true;
+  }
   connect() {
     this._cctvUnsubscribe?.();
     this._cctvUnsubscribe = null;

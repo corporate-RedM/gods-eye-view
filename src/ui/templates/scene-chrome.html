@@ -38,7 +38,34 @@
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
+    <!-- AI Watch: off until started; notifications never move the view (src/ui/aiWatch.js) -->
+    <button id="ai-watch-toggle" type="button" data-state="off" aria-expanded="false" aria-controls="ai-watch-panel" aria-label="AI Watch: Off" title="AI Watch: Off">
+      <span class="material-symbols-outlined" aria-hidden="true">radar</span>
+      <span id="ai-watch-unread" class="ai-watch-badge" hidden>0</span>
+    </button>
   </nav>
+  <section id="ai-watch-panel" class="ai-watch-panel" aria-label="AI Watch" hidden>
+    <div class="ai-watch-header">
+      <span class="ai-watch-dot" aria-hidden="true"></span>
+      <span id="ai-watch-status">AI Watch: Off</span>
+    </div>
+    <label class="ai-watch-field">Region
+      <select id="ai-watch-region"></select>
+    </label>
+    <label class="ai-watch-field">City
+      <select id="ai-watch-city"></select>
+    </label>
+    <label class="ai-watch-field">Municipality
+      <select id="ai-watch-municipality"></select>
+    </label>
+    <p id="ai-watch-detail" class="ai-watch-detail" aria-live="polite"></p>
+    <div class="ai-watch-actions">
+      <button id="ai-watch-start" class="ai-watch-action" type="button" disabled>Start AI Watch</button>
+      <button id="ai-watch-stop" class="ai-watch-action ai-watch-action-stop" type="button" hidden>Stop AI Watch</button>
+    </div>
+    <h2 class="ai-watch-feed-title">Notifications</h2>
+    <ol id="ai-watch-feed" class="ai-watch-feed"></ol>
+  </section>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>

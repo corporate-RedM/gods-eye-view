@@ -1,0 +1,15 @@
+# The detector runs from its own virtual environment inside this repo, so
+# nothing here touches the machine's other Python installs:
+#
+#   python3 -m venv tools/cctv-detector/venv
+#   tools/cctv-detector/venv/bin/pip install -r tools/cctv-detector/requirements.txt
+#
+# torch and torchvision come from the PyTorch CUDA 13.0 index and must stay a
+# matching pair (torch 2.12.x pairs with torchvision 0.27.x).
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.12.1+cu130
+torchvision==0.27.1+cu130
+transformers==5.19.0
+accelerate==1.15.0
+pillow
+numpy

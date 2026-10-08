@@ -8,7 +8,12 @@
 // (PPLX) and historical/abandoned places are dropped so a label names the
 // city a viewer would search for. Requires the `unzip` command.
 //
-//   node scripts/build-cctv-places.mjs
+// The same download also gives CCTV Watch's coverage areas their cities:
+// every place of at least 100,000 people in the countries above, any region
+// (California included, though its cameras carry their own place names).
+// `--areas-only` writes just that list and leaves the label gazetteer as is.
+//
+//   node scripts/build-cctv-places.mjs [--areas-only]
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -18,6 +23,12 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SOURCE_URL = 'https://download.geonames.org/export/dump/cities1000.zip';
 const OUT_FILE = path.join(ROOT, 'src/data/local_data/cctv_places/places.json');
+const AREA_FILE = path.join(
+  ROOT,
+  'src/data/local_data/cctv_places/area_cities.json',
+);
+const AREA_MIN_POPULATION = 100_000;
+const AREAS_ONLY = process.argv.includes('--areas-only');
 
 /** Country code → admin1 codes to keep (null keeps the whole country). */
 const REGIONS = {
@@ -43,6 +54,7 @@ try {
   });
 
   const places = [];
+  const areaCities = [];
   for (const line of text.split('\n')) {
     const cols = line.split('\t');
     if (cols.length < 15) continue;
@@ -50,29 +62,38 @@ try {
     const admin1 = cols[10];
     const population = Number(cols[14]);
     if (!(country in REGIONS)) continue;
-    if (REGIONS[country] && !REGIONS[country].includes(admin1)) continue;
     if (featureClass !== 'P' || SKIP_FEATURE_CODES.has(featureCode)) continue;
-    places.push([
+    const place = [
       name,
       Number(Number(lat).toFixed(4)),
       Number(Number(lon).toFixed(4)),
       Number.isFinite(population) ? population : 0,
-    ]);
+    ];
+    if (place[3] >= AREA_MIN_POPULATION) areaCities.push(place);
+    if (REGIONS[country] && !REGIONS[country].includes(admin1)) continue;
+    places.push(place);
   }
   places.sort((a, b) => b[3] - a[3]);
+  areaCities.sort((a, b) => b[3] - a[3]);
 
   await mkdir(path.dirname(OUT_FILE), { recursive: true });
+  const header = {
+    source: 'GeoNames cities1000 (https://www.geonames.org/), CC BY 4.0',
+    generatedAt: new Date().toISOString().slice(0, 10),
+    fields: ['name', 'lat', 'lon', 'population'],
+  };
+  if (!AREAS_ONLY) {
+    await writeFile(OUT_FILE, `${JSON.stringify({ ...header, places })}\n`);
+    console.log(
+      `Wrote ${places.length} places to ${path.relative(ROOT, OUT_FILE)}`,
+    );
+  }
   await writeFile(
-    OUT_FILE,
-    `${JSON.stringify({
-      source: 'GeoNames cities1000 (https://www.geonames.org/), CC BY 4.0',
-      generatedAt: new Date().toISOString().slice(0, 10),
-      fields: ['name', 'lat', 'lon', 'population'],
-      places,
-    })}\n`,
+    AREA_FILE,
+    `${JSON.stringify({ ...header, places: areaCities })}\n`,
   );
   console.log(
-    `Wrote ${places.length} places to ${path.relative(ROOT, OUT_FILE)}`,
+    `Wrote ${areaCities.length} cities to ${path.relative(ROOT, AREA_FILE)}`,
   );
 } finally {
   await rm(tmp, { recursive: true, force: true });

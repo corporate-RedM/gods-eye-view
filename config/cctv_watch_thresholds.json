@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "status": "evaluation",
+  "source": "BK, 2026-10-07 gate review: while detection is evaluated, unvalidated visual detections stay possible, with no automatic confirmation or auto-fly. Likely and single-camera confirmation are set per type only after the model comparison, from measured accuracy on real camera footage.",
+  "screen": {
+    "default": 0.02
+  },
+  "likely": {},
+  "singleSourceConfirm": {},
+  "cameraConfidenceCap": "possible",
+  "verification": {
+    "source": "Re-measured 2026-10-08 after the prompt corrections (each question worded for the images it is asked with) and with unsettled answers leaving a claim standing as possible: over the 1,458 regression cases and the 98 unused-UCF validation cases together, per type, the arm with the most false calls removed net of true finds lost, kept only when that net is at least 2, since each question costs about 2 s of GPU; on a tie the cheaper whole-frame check. Both sets shaped this choice, so neither is a held-out check of it. people_on_roadway keeps its question although it lost 9 of 11 true finds across the two sets: without it, it is the largest source of live false alarms.",
+    "same": ["people_on_roadway", "vehicle_off_road", "crowd"],
+    "closer": [
+      "debris_on_road",
+      "traffic_stopped",
+      "vehicle_fire",
+      "smoke",
+      "snow_ice_on_road"
+    ]
+  },
+  "supportAgainst": {
+    "source": "BK, 2026-10-08: motion, glare and work-zone checks are supporting evidence, not blanket confirmation or rejection rules. In the checked live comparison cases, work zones were called emergency response, debris and people on the roadway, and their crews and equipment left the stopped-vehicle and stopped-traffic types unsettled. A context seen at the same camera within the window counts against these types: it holds a claim at possible and never rejects it.",
+    "contexts": {
+      "work_zone": {
+        "types": [
+          "emergency_response",
+          "debris_on_road",
+          "people_on_roadway",
+          "vehicle_stopped_in_lane",
+          "vehicle_stopped_on_shoulder",
+          "vehicle_off_road",
+          "traffic_slow",
+          "traffic_stopped"
+        ],
+        "withinMinutes": 30
+      }
+    }
+  },
+  "novelty": {
+    "review": 0.35,
+    "learnMax": 0.25,
+    "warmupSamples": 20
+  }
+}

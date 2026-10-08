@@ -36,7 +36,27 @@ export function createBrowserViteConfig({
           ? true
           : ['localhost', '127.0.0.1', '.local'],
       fs: {
-        deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
+        deny: [
+          '.env',
+          '.env.*',
+          '*.{crt,pem}',
+          '**/.git/**',
+          '**/ENVIRONMENT',
+          // CCTV Watch keeps its detector environment, model weights and
+          // incident evidence in the repo; evidence is served only through
+          // its own loopback routes, never as static files.
+          '**/tools/cctv-detector/**',
+          '**/output/cctv-evidence/**',
+        ],
+      },
+      watch: {
+        // Gigabytes of Python packages, weights and evidence frames that are
+        // never part of the browser module graph.
+        ignored: [
+          '**/tools/cctv-detector/venv/**',
+          '**/tools/cctv-detector/models/**',
+          '**/output/**',
+        ],
       },
       // These headers protect the document containing Provider Settings.
       headers: {

@@ -1,0 +1,200 @@
+/* AI Watch: an icon in the globe actions (status ring, red notification
+   badge) and a panel at the right edge with the area picker, Start/Stop and
+   the notification feed, so nothing sits over the middle of the map. */
+#ai-watch-toggle {
+  position: relative;
+}
+
+#ai-watch-toggle[data-state='starting'],
+#ai-watch-toggle[data-state='stopping'] {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+#ai-watch-toggle[data-state='running'] {
+  border-color: #22c55e;
+  color: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
+}
+
+#ai-watch-toggle[data-state='failed'] {
+  border-color: #ef4444;
+}
+
+/* Unread notifications: a red count on the icon's corner. */
+.ai-watch-badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-family: var(--font-ui, 'Inter', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px rgba(5, 10, 18, 0.9);
+  pointer-events: none;
+}
+
+.ai-watch-panel {
+  position: fixed;
+  top: 96px;
+  right: 24px;
+  z-index: 120;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(62vh, 560px);
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui, 'Inter', sans-serif);
+  font-size: 12px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.ai-watch-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.ai-watch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.ai-watch-panel[data-state='starting'] .ai-watch-dot,
+.ai-watch-panel[data-state='stopping'] .ai-watch-dot {
+  background: #f59e0b;
+}
+
+.ai-watch-panel[data-state='running'] .ai-watch-dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.ai-watch-panel[data-state='failed'] .ai-watch-dot {
+  background: #ef4444;
+}
+
+.ai-watch-field {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+}
+
+.ai-watch-field select {
+  min-width: 0;
+}
+
+.ai-watch-detail {
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
+.ai-watch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-watch-action {
+  flex: 1;
+  height: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ai-watch-action-stop {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.ai-watch-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ai-watch-feed-title {
+  margin: 12px 0 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-watch-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-watch-entry {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 8px 0 8px 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+/* New since the panel was last opened: a red dot beside the entry. */
+.ai-watch-entry[data-unread='true']::before {
+  position: absolute;
+  top: 13px;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  content: '';
+}
+
+.ai-watch-meta {
+  color: var(--text-secondary);
+}
+
+.ai-watch-view {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ai-watch-empty {
+  color: var(--text-secondary);
+}
+
+body.recording-mode .ai-watch-panel,
+body.ui-clean-view .ai-watch-panel {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .ai-watch-panel {
+    top: max(60px, calc(env(safe-area-inset-top) + 48px));
+    right: 16px;
+  }
+}

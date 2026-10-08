@@ -516,7 +516,9 @@ export function cctvUpstreamUserAgent(url) {
  * @param {typeof fetch} [options.fetchImpl=fetch] - Fetch implementation.
  * @param {number} [options.timeoutMs=CCTV_FRAME_FETCH_TIMEOUT_MS] - Abort timeout.
  * @param {number} [options.maxBytes=CCTV_FRAME_MAX_BODY_BYTES] - Snapshot byte cap.
- * @returns {Promise<{ok:true,body:Buffer,contentType:string}|null>}
+ * @returns {Promise<{ok:true,body:Buffer,contentType:string,lastModified:string|null,etag:string|null}|null>}
+ *   `lastModified` and `etag` are the upstream validators, when sent; CCTV
+ *   Watch reads them to date a still and to tell a new capture from a re-serve.
  */
 export async function fetchCctvImageFromUpstream(
   url,
@@ -550,7 +552,13 @@ export async function fetchCctvImageFromUpstream(
     }
     const body = await readCappedResponseBytes(upstream, maxBytes);
     if (!body) return null;
-    return { ok: true, body, contentType };
+    return {
+      ok: true,
+      body,
+      contentType,
+      lastModified: upstream.headers.get('last-modified') || null,
+      etag: upstream.headers.get('etag') || null,
+    };
   } catch {
     return null;
   } finally {

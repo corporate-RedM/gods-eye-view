@@ -36,7 +36,12 @@ const CITY_LABEL_MODE = {
 
 let _cache = null;
 
-function loadPlaces(sourceRoot) {
+/**
+ * The prebuilt place list, cached per file.
+ * @param {string} sourceRoot Repository root.
+ * @returns {Array<[string, number, number, number]>} [name, lat, lon, population]
+ */
+export function loadPlaces(sourceRoot) {
   const resolved = path.resolve(sourceRoot, DEFAULT_PLACES_FILE);
   if (_cache?.path === resolved) return _cache.places;
   let places = [];
