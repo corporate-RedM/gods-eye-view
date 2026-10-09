@@ -93,7 +93,11 @@ export function createHttpGeospatialProvider({
       return normalizeGoogleReverse(
         await json(
           urls.reverse,
-          { latlng: `${latitude},${longitude}`, ...(key ? { key } : {}) },
+          {
+            latlng: `${latitude},${longitude}`,
+            language: 'en',
+            ...(key ? { key } : {}),
+          },
           options,
         ),
       );

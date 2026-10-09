@@ -31,9 +31,11 @@ export const MAP_STACKS = [
     requiresIon: false,
   },
   {
+    // The id stays 'osm' for share links, scenes and voice; the tiles are
+    // Esri's English-labelled street map (maps/imagery.js).
     id: 'osm',
-    label: 'OSM',
-    shortLabel: 'OSM',
+    label: 'Streets',
+    shortLabel: 'STREETS',
     kind: 'osm',
     requiresIon: false,
   },

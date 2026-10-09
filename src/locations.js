@@ -483,7 +483,7 @@ export const CITY_POIS = {
         buildingHeight: 25,
       },
       {
-        name: 'Old Town / Raekoja plats',
+        name: 'Old Town / Town Hall Square',
         lat: 59.4372,
         lon: 24.7452,
         alt: 400,
@@ -492,7 +492,7 @@ export const CITY_POIS = {
         buildingHeight: 20,
       },
       {
-        name: 'Teatri väljak',
+        name: 'Theatre Square',
         lat: 59.4344,
         lon: 24.7514,
         alt: 400,
@@ -510,7 +510,7 @@ export const CITY_POIS = {
         buildingHeight: 20,
       },
       {
-        name: 'Ülemiste',
+        name: 'Ülemiste City',
         lat: 59.421,
         lon: 24.792,
         alt: 600,

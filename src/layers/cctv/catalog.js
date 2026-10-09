@@ -1,4 +1,10 @@
 import { CAMERA_SEEDS, SOURCE_ENDPOINT } from './policy.js';
+import {
+  englishCameraCode,
+  englishCameraName,
+  englishPlaceName,
+  englishProviderName,
+} from '../../data/englishNames.js';
 
 export function createCatalog({ state: layerState, services, parts, source }) {
   const { CITY_POIS } = services.locations;
@@ -170,13 +176,19 @@ export function createCatalog({ state: layerState, services, parts, source }) {
       const poseSource =
         source.poseSource === 'curated' ? 'curated' : seed?.poseSource || null;
 
+      // Upstream names stay in the server catalog; the app shows them in
+      // English (Estonian, Finnish and German packs are translated).
+      const upstreamName = String(source.name || seed?.name || id);
+      const name = englishCameraName(upstreamName, cityId);
       const camera = {
         id,
-        name: String(source.name || seed?.name || id),
+        name,
         cityId,
-        city: String(source.city || city?.name || seed?.city || 'Global'),
-        provider: String(
-          source.provider || seed?.provider || 'Configured CCTV Source',
+        city: englishPlaceName(
+          String(source.city || city?.name || seed?.city || 'Global'),
+        ),
+        provider: englishProviderName(
+          String(source.provider || seed?.provider || 'Configured CCTV Source'),
         ),
         sourceKind: String(
           source.sourceKind ||
@@ -197,7 +209,13 @@ export function createCatalog({ state: layerState, services, parts, source }) {
         pitchDeg,
         license: String(source.license || source.licenseNote || ''),
         credit: String(source.credit || ''),
-        code: String(source.code || ''),
+        // The server derives the "CAM-<code>" label from the upstream name;
+        // a translated camera gets it from its English name, same rule
+        // (cameraDisplayCode in server/providers/cctv/normalize.js).
+        code:
+          name === upstreamName
+            ? String(source.code || '')
+            : englishCameraCode(name),
         // Shipped precompute (see server/providers/cctv/groundHeights.js).
         groundHeights:
           source.groundHeights && typeof source.groundHeights === 'object'

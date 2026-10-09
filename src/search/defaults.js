@@ -50,6 +50,8 @@ export function createDefaultPlaceSearch({
                 );
                 url.searchParams.set('address', query);
                 url.searchParams.set('key', key);
+                // Place names in English, whatever the browser's language.
+                url.searchParams.set('language', 'en');
                 if (bias) url.searchParams.set('bounds', bias);
                 return fetchImpl(url.toString(), { signal });
               },

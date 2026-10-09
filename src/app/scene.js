@@ -7,6 +7,7 @@ import {
 import { registerDataCredits } from '../data/dataCredits.js';
 import { configureCreditKeyboardAccess } from '../creditKeyboard.js';
 import { MapStackController } from '../mapStackController.js';
+import { createPlaceLabels } from '../maps/placeLabels.js';
 import { loadPhotorealisticTileset } from '../mapStartup.js';
 import { initLogoGaze } from '../logoGaze.js';
 import {
@@ -114,10 +115,17 @@ export async function createApplicationScene({
     onError: (message) => console.warn('[MapStack]', message),
   });
   defer(() => mapStackController.destroy());
+  // English borders and place names over the satellite maps.
+  const placeLabels = createPlaceLabels({
+    viewer,
+    controller: mapStackController,
+    requestRender: governorRequestRender,
+  });
+  defer(() => placeLabels.destroy());
   await mapStackController.setStack(tileset ? 'photoreal' : 'esri-imagery', {
     silent: true,
   });
 
   signal.throwIfAborted();
-  return { viewer, tileset, mapStackController, operations };
+  return { viewer, tileset, mapStackController, placeLabels, operations };
 }

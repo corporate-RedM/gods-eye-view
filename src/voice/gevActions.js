@@ -277,6 +277,8 @@ const STACK_ALIASES = new Map([
   ['road', 'osm'],
   ['roads', 'osm'],
   ['road map', 'osm'],
+  ['streets', 'osm'],
+  ['street map', 'osm'],
 ]);
 
 /** Search order for track_entity across entity layer families. */

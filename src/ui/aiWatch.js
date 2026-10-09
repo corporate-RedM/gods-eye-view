@@ -15,6 +15,7 @@
  * - Nothing here touches the map, the active camera or the app session, so
  *   starting or stopping leaves the view exactly where it was.
  */
+import { englishPlaceName } from '../data/englishNames.js';
 import {
   AI_WATCH_AREA_STORAGE_KEY,
   chosenAreaId,
@@ -107,7 +108,7 @@ export function createAiWatchControls({
     for (const item of items) {
       const option = document.createElement('option');
       option.value = item.id;
-      option.textContent = `${item.label} (${item.cameras})`;
+      option.textContent = `${englishPlaceName(item.label)} (${item.cameras})`;
       picker.append(option);
     }
     if (items.some((item) => item.id === keep)) picker.value = keep;

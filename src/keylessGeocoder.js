@@ -204,6 +204,9 @@ export function photonSearchUrl(
   const url = new URL(endpoint);
   url.searchParams.set('q', String(query ?? ''));
   url.searchParams.set('limit', String(limit));
+  // English names wherever OSM has them ("Tokyo, Japan", not "東京都, 日本"):
+  // without it Photon follows the browser's language, then the local name.
+  url.searchParams.set('lang', 'en');
 
   const corners = String(bias ?? '').split('|');
   if (corners.length === 2) {

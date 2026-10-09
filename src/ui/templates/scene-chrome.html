@@ -44,6 +44,15 @@
       <span id="ai-watch-unread" class="ai-watch-badge" hidden>0</span>
     </button>
   </nav>
+  <!-- Where am I: the place at the centre of the screen and the open camera, in plain English (src/ui/whereAmI.js) -->
+  <section id="where-am-i" class="where-am-i" aria-label="Where you are looking" hidden>
+    <div class="where-am-i-levels" data-where-levels></div>
+    <div class="where-am-i-camera" data-where-camera hidden>
+      <span class="where-am-i-caption">Camera</span>
+      <span class="where-am-i-camera-name" data-where-camera-name></span>
+      <span class="where-am-i-camera-place" data-where-camera-place></span>
+    </div>
+  </section>
   <section id="ai-watch-panel" class="ai-watch-panel" aria-label="AI Watch" hidden>
     <div class="ai-watch-header">
       <span class="ai-watch-dot" aria-hidden="true"></span>

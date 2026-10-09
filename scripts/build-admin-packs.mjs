@@ -3,17 +3,22 @@
  * Build the bundled administrative-boundary packs read by
  * `src/data/adminBoundaries.js`:
  *
+ *   src/data/local_data/natural_earth/countries.json
+ *     Natural Earth 10m admin-0 countries, with each one's continent.
  *   src/data/local_data/natural_earth/states_provinces.json
  *     Natural Earth 10m admin-1 states and provinces (public domain).
+ *   src/data/local_data/natural_earth/populated_places.json
+ *     Natural Earth 10m populated places with English names (public domain),
+ *     read by `src/data/placeLocator.js` to name the city under the camera.
  *   src/data/local_data/us_census_counties/counties.json
  *     US Census Bureau cartographic boundary counties (public domain).
  *
- * Both sources are pinned by URL and SHA-256, so a rerun reproduces the packs
+ * Every source is pinned by URL and SHA-256, so a rerun reproduces the packs
  * byte for byte. Downloads are cached outside the repository (default: the
  * system temp directory) and are never committed.
  *
  * Usage:
- *   node scripts/build-admin-packs.mjs [--cache <dir>] [--only countries|admin1|counties]
+ *   node scripts/build-admin-packs.mjs [--cache <dir>] [--only countries|admin1|counties|places]
  *
  * The provenance READMEs beside each pack record these parameters.
  */
@@ -46,6 +51,12 @@ export const SOURCES = Object.freeze({
   places: {
     url: `${NE_BASE}/ne_10m_populated_places_simple.geojson`,
     sha256: 'fd3fa867a320cbd5c5b6bb5bc550afeec2939fb2cef688e508007282a55ac42f',
+  },
+  // The full file carries NAME_EN (English names, e.g. Munich for München);
+  // the simple file above does not.
+  placesFull: {
+    url: `${NE_BASE}/ne_10m_populated_places.geojson`,
+    sha256: '9b8e3de09048ef00dfc70357dbb9fa324493f214b5e0ae4daf1aa79a8d10116b',
   },
   counties: {
     url: 'https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_county_5m.zip',
@@ -490,6 +501,15 @@ function pointInRing(ring, x, y) {
 
 const LATIN = /^[\p{Script=Latin}\p{N}\s.,'’()\-/&]+$/u;
 
+/**
+ * Natural Earth's CONTINENT, or null for "Seven seas (open ocean)" — remote
+ * islands (Saint Helena, Heard Island) that belong to no continent.
+ */
+function continentOf(value) {
+  const continent = String(value || '').trim();
+  return continent && !/^seven seas/i.test(continent) ? continent : null;
+}
+
 function uniqueNames(values, exclude) {
   const seen = new Set(exclude.map(normalizeAdminName));
   const out = [];
@@ -524,6 +544,9 @@ async function buildCountries() {
       iso: p.ADM0_A3,
       iso2: p.ISO_A2_EH || p.ISO_A2,
       type: 'Country',
+      ...(continentOf(p.CONTINENT)
+        ? { continent: continentOf(p.CONTINENT) }
+        : {}),
       ...(unit.decimals !== params.decimals ? { d: unit.decimals } : {}),
       polygons: encodeUnit(unit),
     });
@@ -538,6 +561,9 @@ async function buildCountries() {
       iso: p.GU_A3,
       iso2: 'GB',
       type: 'Constituent country',
+      ...(continentOf(p.CONTINENT)
+        ? { continent: continentOf(p.CONTINENT) }
+        : {}),
       ...(unit.decimals !== params.decimals ? { d: unit.decimals } : {}),
       polygons: encodeUnit(unit),
     });
@@ -682,6 +708,63 @@ async function buildAdmin1() {
   };
 }
 
+/** National capital, state/province capital, or any other place. */
+const PLACE_KIND = Object.freeze({ other: 0, stateCapital: 1, capital: 2 });
+
+/**
+ * Natural Earth populated places with their English names, for naming the
+ * city under the camera. Rows are [name, lat, lon, population, minZoom,
+ * iso2, kind]: `minZoom` is Natural Earth's MIN_ZOOM (lower is more
+ * prominent) and `kind` a PLACE_KIND value.
+ */
+async function buildPlaces() {
+  const source = await fetchPinned('placesFull');
+  const read = (p, key) => p[key] ?? p[key.toLowerCase()];
+  const rows = [];
+  for (const { properties: p, geometry } of JSON.parse(
+    source.bytes.toString('utf8'),
+  ).features) {
+    const [lon, lat] = geometry?.coordinates || [];
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const name = [read(p, 'NAME_EN'), read(p, 'NAME'), read(p, 'NAMEASCII')]
+      .map((value) => String(value || '').trim())
+      .find((value) => value && LATIN.test(value));
+    if (!name) continue;
+    const featureClass = String(read(p, 'FEATURECLA') || '');
+    const iso2 = String(read(p, 'ISO_A2') || '');
+    const minZoom = Number(read(p, 'MIN_ZOOM'));
+    rows.push([
+      name,
+      Math.round(lat * 10000) / 10000,
+      Math.round(lon * 10000) / 10000,
+      Math.max(0, Math.round(Number(read(p, 'POP_MAX')) || 0)),
+      Number.isFinite(minZoom) ? minZoom : 10,
+      /^[A-Z]{2}$/.test(iso2) ? iso2 : null,
+      /admin-0 capital/i.test(featureClass)
+        ? PLACE_KIND.capital
+        : /admin-1 capital/i.test(featureClass)
+          ? PLACE_KIND.stateCapital
+          : PLACE_KIND.other,
+    ]);
+  }
+  rows.sort((a, b) => b[3] - a[3] || a[0].localeCompare(b[0]));
+  return {
+    meta: {
+      title: 'Natural Earth populated places (English names)',
+      source: 'ne_10m_populated_places',
+      url: SOURCES.placesFull.url,
+      sha256: source.digest,
+      commit: NE_COMMIT,
+      license:
+        'Public domain (https://www.naturalearthdata.com/about/terms-of-use/)',
+      fields: ['name', 'lat', 'lon', 'population', 'minZoom', 'iso2', 'kind'],
+      kinds: PLACE_KIND,
+      script: 'scripts/build-admin-packs.mjs',
+    },
+    places: rows,
+  };
+}
+
 async function buildCounties() {
   const params = PARAMS.counties;
   const source = await fetchPinned('counties');
@@ -742,6 +825,16 @@ async function writePack(relative, pack) {
   );
 }
 
+async function writePlaces(relative, pack) {
+  const file = path.join(ROOT, relative);
+  await mkdir(path.dirname(file), { recursive: true });
+  const text = JSON.stringify(pack) + '\n';
+  await writeFile(file, text);
+  console.log(
+    `${relative}: ${pack.places.length} places, ${Buffer.byteLength(text)} bytes`,
+  );
+}
+
 if (!only || only === 'countries')
   await writePack(
     'src/data/local_data/natural_earth/countries.json',
@@ -756,4 +849,9 @@ if (!only || only === 'counties')
   await writePack(
     'src/data/local_data/us_census_counties/counties.json',
     await buildCounties(),
+  );
+if (!only || only === 'places')
+  await writePlaces(
+    'src/data/local_data/natural_earth/populated_places.json',
+    await buildPlaces(),
   );

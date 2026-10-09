@@ -1,4 +1,24 @@
 import { createCctvVideoSurface } from './cctvVideo.js';
+import { englishProviderName } from '../data/englishNames.js';
+
+/**
+ * The panel's title lines: which camera is open and where it is, from city
+ * to continent ("Tallinn · Harju County · Estonia · Europe"). The place line
+ * comes from the shell's `describeCameraPlace` (ui/whereAmI.js).
+ */
+function renderCameraTitle(nameEl, placeEl, enabled, camera, describePlace) {
+  const name = !enabled
+    ? 'CCTV is off'
+    : camera
+      ? camera.name
+      : 'No camera open';
+  const place =
+    enabled && camera
+      ? describePlace?.(camera) || String(camera.city || '')
+      : '';
+  if (nameEl && nameEl.textContent !== name) nameEl.textContent = name;
+  if (placeEl && placeEl.textContent !== place) placeEl.textContent = place;
+}
 export function _calBadgeLabel(badge) {
   switch (badge) {
     case 'calibrated':
@@ -184,13 +204,21 @@ export function _renderCctvState(state) {
   }
 
   this._syncCctvCalReadout(enabled, activeCamera);
+  renderCameraTitle(
+    this._cctvCameraName,
+    this._cctvCameraPlace,
+    enabled,
+    activeCamera,
+    this.actions.describeCameraPlace,
+  );
 
   if (this._cctvMeta) {
     if (activeCamera) {
-      const provider =
+      const provider = englishProviderName(
         activeCamera.sourceLabel ||
-        activeCamera.provider ||
-        'Configured Source';
+          activeCamera.provider ||
+          'Configured Source',
+      );
       const statusMsg = activeCamera.sourceMessage
         ? ` · ${activeCamera.sourceMessage}`
         : '';

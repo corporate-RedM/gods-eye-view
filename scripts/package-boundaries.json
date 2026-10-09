@@ -459,6 +459,7 @@
   "cctv-controls": {
     "exports": ["./ui/cctv"],
     "modules": [
+      "src/data/englishNames.js",
       "src/ui/cctv.js",
       "src/ui/cctvBindings.js",
       "src/ui/cctvCalibration.js",
@@ -527,6 +528,16 @@
   "ui-shell": {
     "exports": ["./ui/shell"],
     "modules": [
+      "src/data/bundledJson.js",
+      "src/data/englishNames.js",
+      "src/data/local_data/natural_earth/countries.json",
+      "src/data/local_data/natural_earth/marine.json",
+      "src/data/local_data/natural_earth/populated_places.json",
+      "src/data/local_data/natural_earth/states_provinces.json",
+      "src/data/placeLocator.js",
+      "src/data/retryableLoad.js",
+      "src/ui/whereAmI.js",
+      "src/ui/whereAmIModel.js",
       "src/hudLayouts.js",
       "src/hudLayoutPolicy.js",
       "src/cyberSonar.js",
@@ -1129,6 +1140,7 @@
   "cctv-layer": {
     "exports": ["./layers/cctv"],
     "modules": [
+      "src/data/englishNames.js",
       "src/data/cctvCards.js",
       "src/data/cctvGizmo.js",
       "src/data/cctvLod.js",
@@ -1343,6 +1355,12 @@
       "./standalone/catalog"
     ],
     "modules": [
+      "src/data/englishNames.js",
+      "src/data/local_data/natural_earth/populated_places.json",
+      "src/data/placeLocator.js",
+      "src/maps/placeLabels.js",
+      "src/ui/whereAmI.js",
+      "src/ui/whereAmIModel.js",
       "src/cyberSonarScene.js",
       "src/cyberSonar.js",
       "src/hudLayouts.js",
@@ -2085,6 +2103,7 @@
   "application-layer-construction": {
     "exports": ["./application/layers"],
     "modules": [
+      "src/data/englishNames.js",
       "src/cyberSonar.js",
       "src/data/bhoteKoshiEvent.js",
       "src/ui/imagerySplit.js",

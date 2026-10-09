@@ -8,6 +8,12 @@
  * handled like choosing the camera from the CCTV dropdown.
  */
 
+import {
+  cameraPackForId,
+  englishCameraName,
+  englishPlaceName,
+} from '../data/englishNames.js';
+
 /** The last area BK chose: a preference only, never a reason to start. */
 export const AI_WATCH_AREA_STORAGE_KEY = 'gev:ai-watch-area:v1';
 
@@ -128,8 +134,10 @@ export function describeEntry(entry, now = Date.now()) {
   const settled = entry.state === 'ongoing';
   return [
     verificationLabel(entry),
-    entry.cameraName || entry.cameraId,
-    entry.place,
+    entry.cameraName
+      ? englishCameraName(entry.cameraName, cameraPackForId(entry.cameraId))
+      : entry.cameraId,
+    englishPlaceName(entry.place ?? ''),
     entry.sightings > 1 ? `seen ${entry.sightings} times` : '',
     formatAgo(entry.lastSeenAt, now),
     settled

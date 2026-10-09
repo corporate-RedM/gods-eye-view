@@ -3,12 +3,16 @@ import { renderMapStackChips, syncMapStackChips } from '../mapStackChips.js';
 /**
  * Own Map Source presentation and selection without constructing map providers.
  * The supplied controller remains authoritative for availability and active state.
+ * An optional `labels` port (maps/placeLabels.js) gets an ON/OFF toggle for the
+ * English borders and place names drawn over the satellite maps.
  */
 export function createMapSourceControls({
   container,
   statusElement,
   controller,
   subscribe,
+  labels = null,
+  labelsToggle = null,
   claimSelection = () => {},
   onStateChanged = () => {},
   onError = () => {},
@@ -20,8 +24,19 @@ export function createMapSourceControls({
     element.addEventListener(type, listener);
     removers.push(() => element.removeEventListener(type, listener));
   };
+  /** Pressed while names are on; dimmed on maps that do not take them. */
+  function renderLabels(activeId = controller.getActiveId()) {
+    if (destroyed || !labels || !labelsToggle) return;
+    const enabled = labels.isEnabled();
+    labelsToggle.setAttribute('aria-pressed', String(enabled));
+    labelsToggle.classList.toggle('active', enabled);
+    labelsToggle.dataset.applies = String(
+      labels.appliesTo?.(activeId) !== false,
+    );
+  }
   function render(state) {
     if (destroyed || !state) return;
+    renderLabels(state.activeId);
     syncMapStackChips(container, state.activeId);
     if (statusElement) {
       const stack = state.activeStack;
@@ -72,6 +87,12 @@ export function createMapSourceControls({
     render(controller.getState());
     onStateChanged();
   });
+  const toggleLabels = () => {
+    if (destroyed || !labels) return;
+    void labels.setEnabled(!labels.isEnabled());
+    renderLabels();
+  };
+  labelsToggle?.addEventListener('click', toggleLabels);
   refresh();
   return {
     render,
@@ -82,6 +103,7 @@ export function createMapSourceControls({
       destroyed = true;
       generation++;
       unsubscribe?.();
+      labelsToggle?.removeEventListener('click', toggleLabels);
       for (const remove of removers.splice(0)) remove();
     },
   };

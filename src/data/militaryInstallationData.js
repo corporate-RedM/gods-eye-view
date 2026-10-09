@@ -163,8 +163,9 @@ export function normalizeMilitaryInstallations(
       // geometry, while a footprint-less way/relation has unknown extent.
       osmType: type,
       class: klass,
+      // English first: OSM's `name` is the local-language name.
       name:
-        String(tags.name || tags['name:en'] || '').trim() ||
+        String(tags['name:en'] || tags.name || '').trim() ||
         humanizeInstallationClass(klass),
       ...point,
       footprint: footprintFrom(element),

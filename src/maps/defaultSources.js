@@ -2,7 +2,7 @@ import { MAP_STACKS } from './catalog.js';
 import { photorealUnavailableReason } from './availability.js';
 import { keySetupRequirement } from '../keySetupCore.mjs';
 import {
-  createOsmImagery,
+  createStreetImagery,
   createEsriImagery,
   createIonImagery,
   ESRI_ATTRIBUTION_HTML,
@@ -48,7 +48,7 @@ export function createDefaultMapSources({
         descriptor.kind === 'ion'
           ? () => createIonImagery(descriptor.style, ionToken)
           : descriptor.id === 'osm'
-            ? createOsmImagery
+            ? createStreetImagery
             : createEsriImagery;
       return {
         ...common,
@@ -59,12 +59,12 @@ export function createDefaultMapSources({
               credit: ESRI_ATTRIBUTION_HTML,
               constructionFallback: {
                 id: 'osm',
-                message: 'Esri Satellite is unavailable; using OSM',
+                message: 'Esri Satellite is unavailable; using Streets',
               },
               tileFailureFallback: {
                 id: 'osm',
                 threshold: 2,
-                message: 'Esri Satellite tile requests failed; using OSM',
+                message: 'Esri Satellite tile requests failed; using Streets',
               },
             }
           : {}),

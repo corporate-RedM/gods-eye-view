@@ -34,6 +34,7 @@ import { aircraftTrackingTarget } from '../cockpitTracking.js';
 
 import { ShellFeedback } from './shellFeedback.js';
 import { createAiWatchControls } from './aiWatch.js';
+import { createWhereAmI, describeCameraPlace } from './whereAmI.js';
 
 import { runCctvLayerEnableTransition } from '../cctvFocusPolicy.js';
 
@@ -64,7 +65,13 @@ export class StyleManager extends ShellFacade {
    */
   constructor(
     viewer,
-    { mapStackController = null, placeSearch, services, requestServices } = {},
+    {
+      mapStackController = null,
+      placeLabels = null,
+      placeSearch,
+      services,
+      requestServices,
+    } = {},
   ) {
     super();
     const {
@@ -121,6 +128,7 @@ export class StyleManager extends ShellFacade {
     });
     this.viewer = viewer;
     this.mapStackController = mapStackController;
+    this.placeLabels = placeLabels;
     this.placeSearch = placeSearch;
 
     this._navigation = new NavigationController({
@@ -570,6 +578,7 @@ export class StyleManager extends ShellFacade {
     this._initRightPanelAdaptiveLayout();
     this._initRadioPanel();
     this._initCctvPanel();
+    this._initWhereAmI();
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
@@ -712,6 +721,8 @@ export class StyleManager extends ShellFacade {
       container: this._mapStackChips,
       statusElement: this._mapStackStatus,
       controller: this.mapStackController,
+      labels: this.placeLabels,
+      labelsToggle: this._placeLabelsToggle,
       subscribe: (onChange) => {
         window.addEventListener('gev:map-stack-changed', onChange);
         return () =>
@@ -950,6 +961,8 @@ export class StyleManager extends ShellFacade {
         _cctvFrameWrap: this._cctvFrameWrap,
         _cctvVideo: this._cctvVideo,
         _cctvMeta: this._cctvMeta,
+        _cctvCameraName: this._cctvCameraName,
+        _cctvCameraPlace: this._cctvCameraPlace,
         _cctvNearestBtn: this._cctvNearestBtn,
         _cctvNextBtn: this._cctvNextBtn,
         _cctvPanel: this._cctvPanel,
@@ -976,6 +989,7 @@ export class StyleManager extends ShellFacade {
         setPanelCollapsed: (...args) => this.setPanelCollapsed(...args),
         showToast: (message) => this._showToast(message),
         syncViewport: () => this._syncCctvPanelViewport(),
+        describeCameraPlace: (camera) => describeCameraPlace(camera),
         setSplitFlapText,
       },
     });
@@ -1403,6 +1417,17 @@ export class StyleManager extends ShellFacade {
     return this._releaseFollowCamera({ preserveVesselSelection: false });
   }
 
+  /** The "Where am I" card: the place under the screen centre and the open camera. */
+  _initWhereAmI() {
+    this._whereAmIControl?.destroy();
+    this._whereAmIControl = createWhereAmI({
+      viewer: this.viewer,
+      root: this._whereAmI,
+      toggle: this._whereAmIToggle,
+      cctv: this.services.cctvLayer,
+    });
+  }
+
   /** Wire the top-center action that clears only manager-owned data layers. */
   /** AI Watch: Start/Stop, area picker and notifications; never moves the view. */
   _initAiWatchControls() {
@@ -1548,6 +1573,7 @@ export class StyleManager extends ShellFacade {
     this._cameraOrientationControls?.destroy();
     this._clearLayersControl?.destroy();
     this._aiWatchControls?.destroy();
+    this._whereAmIControl?.destroy();
     this._cctvControls?.destroy();
     this._radioControls?.destroy();
     this._localSdrControls?.destroy();

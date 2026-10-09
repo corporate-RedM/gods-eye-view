@@ -5,7 +5,7 @@ import { initCockpitCloudEffects } from '../cockpitCloudEffects.js';
 
 /** Construct the existing controls and camera presentation. */
 export function createApplicationControls({
-  scene: { viewer, mapStackController, operations },
+  scene: { viewer, mapStackController, placeLabels = null, operations },
   loaderStatus,
   Controls = StyleManager,
   services,
@@ -25,6 +25,7 @@ export function createApplicationControls({
     },
     requestServices: operations.requests,
     mapStackController,
+    placeLabels,
     placeSearch,
   });
   defer(() => styleManager.orbitController.stop());

@@ -102,4 +102,21 @@ part always stays. Holes under 20 km² are dropped.
 Includes England, Scotland, Wales and Northern Ireland from
 `ne_10m_admin_0_map_units.geojson` at the same commit (SHA-256
 `57da82be755f4afccd8f3b14251bb2752f5df1395f47d2d86f817470c4a48862`).
-Result: 945,843 bytes; 260 features, 2,088 parts, 122,788 vertices.
+Each feature carries `continent` (Natural Earth `CONTINENT`; absent for the
+nine "Seven seas" island territories), read by `src/data/placeLocator.js`.
+Result: 951,417 bytes; 260 features, 2,088 parts, 122,788 vertices.
+
+## Populated places (`populated_places.json`)
+
+English city names for the "Where am I" readout (`src/data/placeLocator.js`):
+Natural Earth 10m populated places, public domain under the terms above.
+Source: `geojson/ne_10m_populated_places.geojson` at the same pinned commit;
+SHA-256 `9b8e3de09048ef00dfc70357dbb9fa324493f214b5e0ae4daf1aa79a8d10116b`.
+Regenerate with `node scripts/build-admin-packs.mjs --only places`.
+
+`places[]` rows are `[name, lat, lon, population, minZoom, iso2, kind]`:
+`name` is `NAME_EN` (Munich, Nuremberg, Quebec City), falling back to `NAME`
+or `NAMEASCII` when that is not in Latin script; coordinates are rounded to 4
+decimals; `population` is `POP_MAX`; `minZoom` is `MIN_ZOOM`; `kind` is 2 for a
+national capital, 1 for a state capital, else 0. Result: 7,342 places,
+329,766 bytes.

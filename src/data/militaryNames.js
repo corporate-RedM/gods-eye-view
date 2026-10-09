@@ -3,6 +3,18 @@ export { militaryOsmKey } from '../sources/militaryTileGeometry.js';
 import { requestWithDeadline } from '../sources/requestDeadline.js';
 import { loadBundledJson } from './bundledJson.js';
 import { createRetryableLoader } from './retryableLoad.js';
+import { humanizeInstallationClass } from './militaryInstallationData.js';
+
+/**
+ * The pack keeps Overture's primary (local-language) names. Labels are
+ * English (BK, 2026-10-08), so a name with no Latin letters at all — Cyrillic,
+ * Arabic, Chinese — reads as its English kind ("Training area") instead.
+ */
+function englishInstallationName(name, klass) {
+  return /\p{Script=Latin}/u.test(String(name || ''))
+    ? name
+    : humanizeInstallationClass(klass);
+}
 
 export const MILITARY_POINT_CAP = 512;
 export const MILITARY_LABEL_CAP = 24;
@@ -40,7 +52,7 @@ export function createMilitaryNamesLoader({
       ]) => ({
         id: `osm:military:${osmKey}`,
         osmKey,
-        name,
+        name: englishInstallationName(name, pack.classes[kind]),
         longitude,
         latitude,
         bbox: [west, south, east, north],
