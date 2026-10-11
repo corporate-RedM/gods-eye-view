@@ -207,6 +207,9 @@
 /* Stacked below the traffic chip so both can show at once */
 #cctv-sync-chip {
   top: 146px;
+  flex-direction: column;
+  gap: 3px;
+  max-width: calc(100vw - 32px);
 }
 
 #traffic-sync-chip.visible,

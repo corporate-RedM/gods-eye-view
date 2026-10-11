@@ -372,15 +372,23 @@ export function _updateCctvSyncChip(loading, enabled) {
   const total = Number(loading?.total) || 0;
   const loaded = Math.max(0, Math.min(Number(loading?.loaded) || 0, total));
   const busy = !!enabled && !!loading?.active && total > 0;
+  const catalogueCount =
+    Number(this._cctvState?.count) || this._cctvState?.cameras?.length || 0;
+  const catalogueText = `${catalogueCount.toLocaleString()} camera records loaded`;
+  this._cctvSyncChip.title =
+    'Nearby progress refines terrain placement, not video frames. The loaded catalogue remains searchable; feeds open on demand.';
 
   if (busy) {
     clearTimeout(this._cctvChipHideTimer);
     this._cctvChipHideTimer = null;
     this._cctvChipWasBusy = true;
-    this.actions.setSplitFlapText(this._cctvSyncLabel, 'loading frames');
+    this.actions.setSplitFlapText(
+      this._cctvSyncLabel,
+      'positioning nearby cameras',
+    );
     // The counter is left plain on purpose: it ticks every few frames
     // during a grid load, and flapping it would read as a slot machine.
-    this._cctvSyncProgress.textContent = `${loaded}/${total}`;
+    this._cctvSyncProgress.textContent = `${loaded}/${total} · ${catalogueText}`;
     this._cctvSyncChip.classList.add('visible');
     return;
   }
@@ -388,8 +396,8 @@ export function _updateCctvSyncChip(loading, enabled) {
   if (this._cctvChipWasBusy && enabled && total > 0) {
     // Load just completed — flash the final count, then auto-hide.
     this._cctvChipWasBusy = false;
-    this.actions.setSplitFlapText(this._cctvSyncLabel, 'camera grid ready');
-    this._cctvSyncProgress.textContent = `${total}/${total}`;
+    this.actions.setSplitFlapText(this._cctvSyncLabel, 'nearby cameras ready');
+    this._cctvSyncProgress.textContent = `${total}/${total} · ${catalogueText}`;
     this._cctvSyncChip.classList.add('visible');
     clearTimeout(this._cctvChipHideTimer);
     this._cctvChipHideTimer = window.setTimeout(() => {

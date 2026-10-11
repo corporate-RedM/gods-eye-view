@@ -40,6 +40,9 @@ Use these fields rather than an old `.env` value or a test-suite count as eviden
 Performance budgets do **not** trim the inventory: the CCTV dropdown renders up
 to 250 suggestions plus the current selection while searching all records;
 terrain refinement prioritizes 256 nearby cameras and the selected camera.
+The on-screen **Positioning nearby cameras** counter reports that local terrain
+work separately from the full **camera records loaded** count. It is not a count
+of downloaded video frames; camera feeds are opened on demand.
 **Nearest** selects another matching feed near the viewed area's centre;
 **Focus** returns to the selected feed. Preserve these behaviors when migrating.
 
