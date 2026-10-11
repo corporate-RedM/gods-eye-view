@@ -11,6 +11,8 @@ page.on('pageerror', e => errors.push(e.message));
 try {
   await page.goto(base + '?welcome=0', { waitUntil:'domcontentloaded', timeout:90000 });
   await page.waitForFunction(() => !!window.__godsEyeView?.workspace, { timeout:120000 });
+  await page.evaluate(async () => { await window.__godsEyeView.styleManager.initialRestorePromise; });
+  await new Promise(r => setTimeout(r, 3000));
   await page.evaluate(async () => {
     await window.__godsEyeView.styleManager.initialRestorePromise;
     const {viewer} = window.__godsEyeView;
@@ -20,10 +22,15 @@ try {
     viewer.camera.setView({ destination:window.__CESIUM__.Cartesian3.fromDegrees(-79.3832,43.6532,9000), orientation:{ heading:0,pitch:-Math.PI/2,roll:0 } });
   });
   await new Promise(r => setTimeout(r, 6000));
+  const camera = await page.evaluate(() => {
+    const p=window.__godsEyeView.viewer.camera.positionCartographic,c=window.__CESIUM__;
+    return {lon:c.Math.toDegrees(p.longitude),lat:c.Math.toDegrees(p.latitude),height:p.height};
+  });
+  assert.ok(Math.abs(camera.lon+79.3832)<0.001 && Math.abs(camera.lat-43.6532)<0.001 && Math.abs(camera.height-9000)<1,JSON.stringify(camera));
   await page.screenshot({ path:`${dir}/toronto-globe.png` });
-  for (const tab of ['Overview','Cameras','Areas','Investigate','Forecast','Tools']) {
+  for (const tab of ['Overview','News','Cameras','Areas','Investigate','Forecast','Tools']) {
     await page.evaluate(tab => window.__godsEyeView.workspace.open(tab), tab);
-    await new Promise(r => setTimeout(r, tab === 'Cameras' ? 20000 : 1200));
+    await new Promise(r => setTimeout(r, tab === 'Cameras' ? 20000 : tab === 'News' ? 10000 : 1200));
     await page.screenshot({ path:`${dir}/${tab.toLowerCase()}.png` });
     console.log(tab, await page.$eval('#eye-workspace', el => el.innerText.slice(0,700)));
   }
