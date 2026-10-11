@@ -1,0 +1,225 @@
+// Adapted from OSIRIS (MIT), commit 83b8cd1. See docs/OSIRIS-NOTICE.md.
+import { stealthFetch } from '../../../lib/stealthFetch.js';
+import { cachedSource } from '../../../lib/sourceCache.js';
+import { proxiedImageUrl } from './types.js';
+/**
+ * OSIRIS — Asian cameras via the OpenCCTV directory.
+ *
+ * Source: https://opencctv.org — an aggregator carrying ~145,000 cameras, of
+ * which ~30,000 sit inside the Asian boxes below, most of them republished
+ * from official city and prefectural operators (Busan and Ansan's ITS, Seoul,
+ * Hong Kong's Observatory, Japan's river and road bureaus). It fills the
+ * region the traffic-authority feeds cannot: South Korea, Indonesia, Vietnam
+ * and the Philippines publish no open machine-readable CCTV index of their
+ * own — every national portal checked (Korea's UTIC and ITS, Taiwan's TDX)
+ * gates its camera list behind an API key.
+ *
+ * Two endpoints, both the ones the site's own map calls:
+ *
+ *   GET  /api/cameras/markers   the whole index as parallel arrays — id, lat,
+ *                               lng — and nothing else. 7.3 MB, and it ignores
+ *                               every filter parameter tried, so the shape of
+ *                               this module is set by having to take all of it
+ *                               and narrow locally.
+ *   POST /api/cameras/batch     {ids:[…]} → full records. It answers with at
+ *                               most 50 rows however many ids are sent, which
+ *                               is what BATCH_SIZE encodes and why the region
+ *                               is sampled rather than taken whole: 24,000
+ *                               cameras would be 483 round trips.
+ */
+const MARKERS = 'https://opencctv.org/api/cameras/markers';
+const BATCH = 'https://opencctv.org/api/cameras/batch';
+/** The server truncates a batch response to 50 rows regardless of ids sent. */
+const BATCH_SIZE = 50;
+const REGIONS = {
+    /* China, Japan, the Koreas and Taiwan — ~24,000 candidates. */
+    eastasia: { bounds: { minLat: 18, maxLat: 46, minLng: 73.5, maxLng: 146 }, cap: 1200 },
+    /* Indochina, Indonesia, the Philippines — ~7,700 candidates. */
+    seasia: { bounds: { minLat: -11, maxLat: 24, minLng: 92, maxLng: 130 }, cap: 800 },
+    /* The Gulf, Iran, Central Asia and the subcontinent — ~950 between them, so
+       the cap is never the binding constraint here; it is a guard, not a quota. */
+    westasia: { bounds: { minLat: 5, maxLat: 56, minLng: 25, maxLng: 92 }, cap: 600 },
+};
+/**
+ * Hosts another module already fetches in full. The westasia box reaches west
+ * to 25°E, which takes in eastern Lithuania, and OpenCCTV republishes Via
+ * Lietuva's cameras — so without this each one lands on the map twice: once
+ * here, and once from lithuania.ts, which carries the whole live set.
+ */
+const COVERED_ELSEWHERE = ['eismoinfo.lt'];
+function coveredElsewhere(url) {
+    try {
+        const host = new URL(url).hostname;
+        return COVERED_ELSEWHERE.some(h => host === h || host.endsWith('.' + h));
+    }
+    catch {
+        return false;
+    }
+}
+/** OpenCCTV's `feed_type` in OSIRIS's vocabulary; null means unusable. */
+export function streamKind(feedType) {
+    switch ((feedType || '').toLowerCase()) {
+        case 'm3u8':
+        case 'hls': return 'hls';
+        case 'mjpeg': return 'mjpeg';
+        case 'image': return 'jpg';
+        case 'iframe': return 'iframe';
+        default: return null;
+    }
+}
+/** Map one record to a camera, or null if it should be skipped. */
+export function mapRecord(rec) {
+    if (!rec?.id || rec.active === 0)
+        return null;
+    const url = rec.feed_url?.trim();
+    if (!url)
+        return null;
+    if (coveredElsewhere(url))
+        return null;
+    /* Malaysia's LLM cameras point at the operator's own "camera offline"
+       placeholder while a camera is down, and that path 404s. A pin that can
+       only ever show a broken image is worse than no pin. */
+    if (/\/offcam\//i.test(url))
+        return null;
+    const kind = streamKind(rec.feed_type);
+    if (!kind)
+        return null;
+    const { lat, lng } = rec;
+    if (typeof lat !== 'number' || typeof lng !== 'number')
+        return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return null;
+    /* A snapshot tile re-requests with `?_t=` on every refresh. Where the source
+       has recorded that a query string breaks the URL, that tile would turn into
+       a broken box the moment it refreshed, so it never gets one. */
+    if (kind === 'jpg' && rec.cache_buster_breaks_url)
+        return null;
+    const name = rec.name?.trim() || rec.city?.trim() || 'Camera';
+    return {
+        id: `occ-${rec.id}`,
+        lat,
+        lng,
+        name,
+        city: rec.city?.trim() || '',
+        country: rec.country?.trim() || '',
+        /* A still is a feed_url; everything else is a stream the player picks up. */
+        ...(kind === 'jpg' ? { feed_url: proxiedImageUrl(url) } : { stream_url: url, stream_type: kind }),
+        source: rec.source?.trim() ? `OpenCCTV / ${rec.source.trim()}` : 'OpenCCTV',
+    };
+}
+/**
+ * Thin the candidates down to MAX_CAMERAS by walking the list at a fixed
+ * stride. The index is ordered by id, which groups cameras by operator and so
+ * by place — taking the first N would return one city and call it a region.
+ */
+export function sample(items, cap) {
+    if (items.length <= cap)
+        return items;
+    const stride = items.length / cap;
+    const out = [];
+    for (let i = 0; out.length < cap && Math.floor(i) < items.length; i += stride) {
+        out.push(items[Math.floor(i)]);
+    }
+    return out;
+}
+const batchPool = { active: 0, waiting: [] };
+async function fetchBatch(ids) {
+    if (batchPool.active >= 3) await new Promise(resolve => batchPool.waiting.push(resolve));
+    batchPool.active++;
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try { return await requestBatch(ids); }
+        catch (error) {
+          if (attempt === 3 || error.permanent) throw error;
+          await new Promise(resolve => setTimeout(resolve, error.retryMs || 1000 * 2 ** attempt));
+        }
+      }
+    } finally { batchPool.active--; batchPool.waiting.shift()?.(); }
+}
+async function requestBatch(ids) {
+    const res = await stealthFetch(BATCH, {
+        method: 'POST',
+        signal: AbortSignal.timeout(20000),
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Referer: 'https://opencctv.org/',
+        },
+        body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) {
+        const error = new Error(`OpenCCTV batch HTTP ${res.status}`);
+        error.permanent = res.status >= 400 && res.status < 500 && res.status !== 429;
+        error.retryMs = Math.min(30000, Math.max(1000, Number(res.headers.get('retry-after')) * 1000 || 1000));
+        await res.body?.cancel();
+        throw error;
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data.filter(Boolean) : [];
+}
+/** The marker index, fetched once and shared by every Asian sub-region. */
+const markerIndex = cachedSource('opencctv-index', async () => {
+    const res = await stealthFetch(MARKERS, {
+        signal: AbortSignal.timeout(30000),
+        headers: { Accept: 'application/json', Referer: 'https://opencctv.org/' },
+    });
+    if (!res.ok)
+        throw new Error(`OpenCCTV markers HTTP ${res.status}`);
+    const index = (await res.json());
+    if (!Array.isArray(index.ids) || !Array.isArray(index.lats) || !Array.isArray(index.lngs)) {
+        throw new Error('OpenCCTV markers returned no index');
+    }
+    /* Wrapped in an array because the cache stores lists; it is one 7.3 MB
+       download shared by all three regions rather than one download each. */
+    return [index];
+});
+function loader(region, bounds, cap) {
+    return async () => {
+        const [index] = await markerIndex();
+        const ids = index?.ids ?? [];
+        const lats = index?.lats ?? [];
+        const lngs = index?.lngs ?? [];
+        const inRegion = [];
+        for (let i = 0; i < ids.length; i++) {
+            const lat = lats[i];
+            const lng = lngs[i];
+            if (lat > bounds.minLat && lat < bounds.maxLat &&
+                lng > bounds.minLng && lng < bounds.maxLng) {
+                inRegion.push(ids[i]);
+            }
+        }
+        const wanted = inRegion;
+        const chunks = [];
+        for (let i = 0; i < wanted.length; i += BATCH_SIZE) {
+            chunks.push(wanted.slice(i, i + BATCH_SIZE));
+        }
+        const results = [];
+        // Fetch the full index in bounded batches rather than sampling cameras.
+        let next = 0;
+        await Promise.all(Array.from({ length: 6 }, async () => {
+            while (next < chunks.length) {
+                const chunk = chunks[next++];
+                try { results.push({ status: 'fulfilled', value: await fetchBatch(chunk) }); }
+                catch (reason) { results.push({ status: 'rejected', reason }); }
+            }
+        }));
+        const seen = new Map();
+        for (const r of results) {
+            if (r.status !== 'fulfilled')
+                continue;
+            for (const rec of r.value) {
+                const cam = mapRecord(rec);
+                if (cam)
+                    seen.set(cam.id, cam);
+            }
+        }
+        const cams = [...seen.values()];
+        const failedBatches = results.filter(r => r.status === 'rejected').length;
+        Object.defineProperty(cams, 'inventory', { value: { candidates: inRegion.length, batches: chunks.length, failedBatches, partial: failedBatches > 0 } });
+        console.log(`[OSIRIS] ${region} cameras — OpenCCTV: ${cams.length} of ${inRegion.length} in region`);
+        return cams;
+    };
+}
+export const fetchEastAsiaCameras = cachedSource('eastasia', loader('East Asia', REGIONS.eastasia.bounds, REGIONS.eastasia.cap));
+export const fetchSeAsiaCameras = cachedSource('seasia', loader('Southeast Asia', REGIONS.seasia.bounds, REGIONS.seasia.cap));
+export const fetchWestAsiaCameras = cachedSource('westasia', loader('West & Central Asia', REGIONS.westasia.bounds, REGIONS.westasia.cap));

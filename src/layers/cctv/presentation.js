@@ -92,6 +92,8 @@ export function createPresentation({
       mountHeightM: camera.mountHeightM,
       active: isActive,
       feedType: camera.feedType,
+      externalUrl: camera.externalUrl || '',
+      embedUrl: camera.embedUrl || '',
       isVideo: parts.navigation.recordMatchesFeed(record, 'live'),
       // A live stream that failed this session and fell back to its still.
       liveFailed: !!record.liveFailed,

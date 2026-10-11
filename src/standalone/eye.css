@@ -203,6 +203,7 @@ body.eye-workspace {
   overflow: hidden;
 }
 .eye-camera video,
+.eye-camera iframe,
 .eye-camera img {
   display: block;
   width: 100%;

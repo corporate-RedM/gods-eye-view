@@ -78,7 +78,7 @@ test('area exports close polygons without mutating saved geometry and escape CSV
     false,
   );
 });
-test('camera adapters keep live URLs and reject embeds, missing feeds and invalid positions', () => {
+test('camera adapters retain direct feeds, embedded players and operator links; reject invalid positions and unsafe URLs', () => {
   const raw = {
     id: '1',
     lat: 51,
@@ -92,7 +92,21 @@ test('camera adapters keep live URLs and reject embeds, missing feeds and invali
   assert.equal(c.id, 'osiris-nl-1');
   assert.equal(c.feedType, 'hls');
   assert.equal(c.url, raw.stream_url);
-  assert.equal(cameraToNative({ ...raw, stream_type: 'iframe' }, 'nl'), null);
+  assert.equal(
+    cameraToNative({ ...raw, stream_type: 'iframe' }, 'nl').feedType,
+    'iframe',
+  );
+  const external = cameraToNative(
+    {
+      id: 'external',
+      lat: 50,
+      lng: 4,
+      external_url: 'https://example.com/camera',
+    },
+    'nl',
+  );
+  assert.equal(external.feedType, 'external');
+  assert.equal(external.externalUrl, 'https://example.com/camera');
   assert.equal(cameraToNative({ ...raw, lat: 100 }, 'nl'), null);
   assert.equal(
     cameraToNative({ ...raw, stream_url: 'file:///tmp/a' }, 'nl'),

@@ -1,7 +1,8 @@
 import puppeteer from 'puppeteer';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
-const url = 'http://127.0.0.1:4176/?welcome=0';
+const base = process.env.EYE_QA_URL || 'http://127.0.0.1:4180';
+const url = base + '/?welcome=0';
 const dir = '/tmp/childs-eye-evidence'; await fs.mkdir(dir,{recursive:true});
 const browser = await puppeteer.launch({ headless:true, defaultViewport:{width:1920,height:1080}, protocolTimeout:180000,
  args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
@@ -54,7 +55,7 @@ try {
  console.log('WATCH',watched,watchSummary);
  const dns = await page.evaluate(async()=>({status:(await fetch('/api/eye/osint/dns?domain=example.com')).status}));
  assert.equal(dns.status,200);
- const badOrigin=await fetch('http://127.0.0.1:4176/api/eye/oi',{headers:{Origin:'https://example.com'}}); assert.equal(badOrigin.status,403);
+ const badOrigin=await fetch(base + '/api/eye/oi',{headers:{Origin:'https://example.com'}}); assert.equal(badOrigin.status,403);
  await page.evaluate(()=>window.__godsEyeView.workspace.close());
  assert.equal(await page.$$eval('.eye-camera',els=>els.length),0);
  await fs.writeFile(`${dir}/feature-results.json`,JSON.stringify({selected,media,analysis,watched,watchSummary,dns,foreignOriginStatus:badOrigin.status},null,2));

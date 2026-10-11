@@ -268,7 +268,10 @@ async function fetchGraphqlFeatures(site) {
  * @param {string} siteId Site `id` from CASTLE_ROCK_511_SITES (e.g. 'us-wi').
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadCastleRock511Sources(siteId) {
+export async function loadCastleRock511Sources(
+  siteId,
+  { fullCatalog = false } = {},
+) {
   const site = CASTLE_ROCK_511_SITES.find((entry) => entry.id === siteId);
   if (!site) return [];
   try {
@@ -301,7 +304,11 @@ export async function loadCastleRock511Sources(siteId) {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(DEFAULT_CASTLE_ROCK_511_MAX_SOURCES, maxRaw))
       : DEFAULT_CASTLE_ROCK_511_MAX_SOURCES;
-    const prioritized = prioritizeSources(usable, maxCount, site.anchors);
+    const prioritized = prioritizeSources(
+      usable,
+      fullCatalog ? 0 : maxCount,
+      site.anchors,
+    );
     const live = prioritized.filter((camera) => camera.feedType === 'hls');
     console.log(
       `[CCTV] Loaded ${site.provider} camera sources: ${unique.length} with live video, ${live.length} streaming (using nearest ${prioritized.length})`,

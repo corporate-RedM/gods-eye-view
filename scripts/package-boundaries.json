@@ -164,6 +164,7 @@
     "modules": [
       "server/providers/cctv.js",
       "server/providers/cctv/cap.js",
+      "server/providers/cctv/fullCatalog.js",
       "server/providers/cctv/groundHeights.js",
       "server/providers/cctv/catalog.js",
       "server/providers/cctv/castleRock511.js",

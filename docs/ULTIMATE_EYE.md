@@ -31,9 +31,11 @@ remain available.
 - A neutral dark interface adds a four-camera desk with native stream leases,
   snapshots, explicit unavailable states, and cleanup when the desk closes.
   Ontario, Caltrans HLS and Iowa fragmented-MP4 HLS were checked with live feeds.
-- Twelve additional operator adapters supplement the existing CCTV catalogue.
-  Native sources retain their configured 10,000-source budget; added sources
-  receive a separate budget, rather than evicting Child's Eye sources.
+- The corrected camera catalogue includes all 56 registered Osiris regions and
+  all 19 native provider groups. The standalone app imposes no camera-count caps
+  and loads all California and Texas districts. Exact shared feeds are merged
+  with aliases retained. Embedded players and operator-hosted cameras remain
+  accessible, with their feed type labeled accurately.
 - News combines public RSS and Telegram reports with source links. Approximate
   report locations are labeled; a report is not independent confirmation.
 - Areas can save the current view or a drawn polygon, query available records,
@@ -80,14 +82,20 @@ working stream. Some Netherlands snapshots were unavailable during live checks.
 
 ## Configuration and maintenance
 
-The existing ignored `.env` is preserved. Optional settings:
+The existing ignored `.env` is preserved. `EYE_EXTRA_CAMERAS=0` explicitly
+disables the imported regions; by default they are enabled. The standalone app's
+full-inventory mode bypasses the old global and per-provider camera caps and
+district restrictions. `EYE_CAMERA_PACK_CAP` and `EYE_EXTRA_CAMERA_CAP` are no
+longer used. Reusable provider-library consumers retain their existing bounded
+mode unless they explicitly request `fullCatalog`.
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `CCTV_MAX_SOURCES` | 10000 on BK's machine | Native source allocation |
-| `EYE_EXTRA_CAMERAS` | 1 | Set to 0 to disable additional operators |
-| `EYE_CAMERA_PACK_CAP` | 400 | Limit each additional operator |
-| `EYE_EXTRA_CAMERA_CAP` | 5000 | Separate extra-source allowance |
+Inventories persist in ignored `.cache/cctv-full-catalog.json` and survive
+restarts/provider failures. Initial collection shows progress; subsequent starts
+can use the saved inventory while refreshing. Cameras offers pagination and an
+**Export provider coverage** action. Coverage distinguishes unavailable, stale,
+and partial sources; a registered record does not establish working playback.
+See [INTEGRATION_AUDIT.md](INTEGRATION_AUDIT.md) for the first delivery's other
+omissions, which are not represented as finished by the camera correction.
 
 Local research endpoints reject foreign origins and nonlocal access. API modules
 are selected from an explicit allowlist. Import directions preserve the portable
@@ -104,7 +112,7 @@ WASM asset handling, and credential changes made in this integration.
 
 Before integration, Child's Eye passed 5,553 main tests with one skip; upstream
 passed 6,242 with one skip. Both also passed their allocation checks. The combined
-suite has 6,436 main tests (6,435 passing, one skip), plus 14 allocation checks.
+suite has 6,438 main tests (6,437 passing, one skip), plus 14 allocation checks.
 Production build, formatting, package boundaries and layer-token compatibility
 are checked separately. A socket test now waits for the second AIS fix before
 asserting a two-point trail, avoiding a race between separate WebSocket frames.

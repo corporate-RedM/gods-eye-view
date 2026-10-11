@@ -100,7 +100,9 @@ import { readResponseJsonCapped } from '../common/http.js';
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadAustinSourcesFromOpenData() {
+export async function loadAustinSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   const endpoint = process.env.CCTV_AUSTIN_ROWS_URL || DEFAULT_AUSTIN_ROWS_URL;
   try {
     const resp = await fetch(endpoint, {
@@ -175,7 +177,9 @@ export async function loadAustinSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(300, Math.floor(maxRaw)))
       : DEFAULT_AUSTIN_MAX_SOURCES;
-    const prioritized = prioritizeSources(unique, maxCount, [AUSTIN_DOWNTOWN]);
+    const prioritized = prioritizeSources(unique, fullCatalog ? 0 : maxCount, [
+      AUSTIN_DOWNTOWN,
+    ]);
     if (prioritized.length < unique.length) {
       console.log(
         `[CCTV] Loaded Austin camera sources: ${unique.length} (using nearest ${prioritized.length})`,
@@ -204,9 +208,12 @@ export async function loadAustinSourcesFromOpenData() {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadCaltransSourcesFromOpenData() {
-  const districtsRaw =
-    process.env.CCTV_CALTRANS_DISTRICTS ?? DEFAULT_CALTRANS_DISTRICTS;
+export async function loadCaltransSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
+  const districtsRaw = fullCatalog
+    ? '1,2,3,4,5,6,7,8,9,10,11,12'
+    : (process.env.CCTV_CALTRANS_DISTRICTS ?? DEFAULT_CALTRANS_DISTRICTS);
   const districts = String(districtsRaw)
     .split(',')
     .map((token) => Number(token.trim()))
@@ -341,7 +348,11 @@ export async function loadCaltransSourcesFromOpenData() {
   const maxCount = Number.isFinite(maxRaw)
     ? Math.max(8, Math.min(2000, Math.floor(maxRaw)))
     : DEFAULT_CALTRANS_MAX_SOURCES;
-  const prioritized = prioritizeSources(cameras, maxCount, CALTRANS_ANCHORS);
+  const prioritized = prioritizeSources(
+    cameras,
+    fullCatalog ? 0 : maxCount,
+    CALTRANS_ANCHORS,
+  );
   console.log(
     `[CCTV] Loaded Caltrans camera sources: ${cameras.length} inService (using nearest ${prioritized.length})`,
   );
@@ -358,7 +369,7 @@ export async function loadCaltransSourcesFromOpenData() {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadTflSourcesFromOpenData() {
+export async function loadTflSourcesFromOpenData({ fullCatalog = false } = {}) {
   try {
     const appKey = String(process.env.TFL_APP_KEY || '').trim();
     const url = appKey
@@ -424,7 +435,9 @@ export async function loadTflSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(600, Math.floor(maxRaw)))
       : DEFAULT_TFL_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, [LONDON_CENTER]);
+    const prioritized = prioritizeSources(cameras, fullCatalog ? 0 : maxCount, [
+      LONDON_CENTER,
+    ]);
     console.log(
       `[CCTV] Loaded TfL JamCam sources: ${cameras.length} available (using nearest ${prioritized.length})`,
     );
@@ -506,7 +519,9 @@ function pickOntarioCctvView(views) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadOntarioSourcesFromOpenData() {
+export async function loadOntarioSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   // 511on.ca now rejects keyless calls with 400 "Invalid Key"; the developer key
   // goes in the `key` query parameter (511on.ca/help/endpoint/cameras).
   const apiKey = String(process.env.ONTARIO_511_API_KEY || '').trim();
@@ -591,7 +606,11 @@ export async function loadOntarioSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(1000, Math.floor(maxRaw)))
       : DEFAULT_ONTARIO_MAX_SOURCES;
-    const prioritized = prioritizeSources(unique, maxCount, ONTARIO_ANCHORS);
+    const prioritized = prioritizeSources(
+      unique,
+      fullCatalog ? 0 : maxCount,
+      ONTARIO_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded Ontario 511 camera sources: ${unique.length} enabled (using nearest ${prioritized.length})`,
     );
@@ -632,7 +651,9 @@ export async function loadOntarioSourcesFromOpenData() {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadFintrafficSourcesFromOpenData() {
+export async function loadFintrafficSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   try {
     const resp = await fetch(FINTRAFFIC_STATIONS_URL, {
       headers: {
@@ -725,7 +746,11 @@ export async function loadFintrafficSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(600, Math.floor(maxRaw)))
       : DEFAULT_FINTRAFFIC_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, FINLAND_ANCHORS);
+    const prioritized = prioritizeSources(
+      cameras,
+      fullCatalog ? 0 : maxCount,
+      FINLAND_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded Fintraffic camera sources: ${cameras.length} live presets across ${stationsSeen} stations (using nearest ${prioritized.length})`,
     );
@@ -784,7 +809,9 @@ const DRIVEBC_ORIENTATION_HEADINGS = Object.freeze({
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadDriveBcSourcesFromOpenData() {
+export async function loadDriveBcSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   try {
     const resp = await fetch(DRIVEBC_WEBCAMS_URL, {
       headers: { Accept: 'application/json' },
@@ -858,7 +885,11 @@ export async function loadDriveBcSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(1200, Math.floor(maxRaw)))
       : DEFAULT_DRIVEBC_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, DRIVEBC_ANCHORS);
+    const prioritized = prioritizeSources(
+      cameras,
+      fullCatalog ? 0 : maxCount,
+      DRIVEBC_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded DriveBC camera sources: ${cameras.length} published (using nearest ${prioritized.length})`,
     );
@@ -967,9 +998,12 @@ export function normalizeTxdotDistrictPayload(payload, district) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadTxdotSourcesFromOpenData() {
-  const districtsRaw =
-    process.env.CCTV_TXDOT_DISTRICTS ?? DEFAULT_TXDOT_DISTRICTS;
+export async function loadTxdotSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
+  const districtsRaw = fullCatalog
+    ? [...TXDOT_DISTRICTS].join(',')
+    : (process.env.CCTV_TXDOT_DISTRICTS ?? DEFAULT_TXDOT_DISTRICTS);
   const districts = [
     ...new Set(
       String(districtsRaw)
@@ -1017,7 +1051,11 @@ export async function loadTxdotSourcesFromOpenData() {
   const maxCount = Number.isFinite(maxRaw)
     ? Math.max(8, Math.min(2000, Math.floor(maxRaw)))
     : DEFAULT_TXDOT_MAX_SOURCES;
-  const prioritized = prioritizeSources(cameras, maxCount, TXDOT_ANCHORS);
+  const prioritized = prioritizeSources(
+    cameras,
+    fullCatalog ? 0 : maxCount,
+    TXDOT_ANCHORS,
+  );
   console.log(
     `[CCTV] Loaded TxDOT camera sources: ${cameras.length} online across ${districts.join(',')} (using nearest ${prioritized.length})`,
   );
@@ -1034,6 +1072,7 @@ export async function loadTxdotSourcesFromOpenData() {
  * @returns {Array<object>} Normalized camera source objects.
  */
 export function loadTallinnSourcesFromCatalog({
+  fullCatalog = false,
   sourceRoot = process.cwd(),
 } = {}) {
   const sourceFile =
@@ -1122,7 +1161,9 @@ export function loadTallinnSourcesFromCatalog({
   const maxCount = Number.isFinite(maxRaw)
     ? Math.max(8, Math.min(300, Math.floor(maxRaw)))
     : DEFAULT_TALLINN_MAX_SOURCES;
-  const prioritized = prioritizeSources(unique, maxCount, [TALLINN_CENTER]);
+  const prioritized = prioritizeSources(unique, fullCatalog ? 0 : maxCount, [
+    TALLINN_CENTER,
+  ]);
   console.log(
     `[CCTV] Loaded Tallinn camera sources: ${unique.length} (using nearest ${prioritized.length})`,
   );
@@ -1195,7 +1236,9 @@ export function parseTarkteeDatexImages(xml) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadTarkteeSourcesFromDatex() {
+export async function loadTarkteeSourcesFromDatex({
+  fullCatalog = false,
+} = {}) {
   try {
     const [locResp, imgResp] = await Promise.all([
       fetch(TARKTEE_LOCATIONS_URL, {
@@ -1270,7 +1313,11 @@ export async function loadTarkteeSourcesFromDatex() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(300, Math.floor(maxRaw)))
       : DEFAULT_TARKTEE_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, TARKTEE_ANCHORS);
+    const prioritized = prioritizeSources(
+      cameras,
+      fullCatalog ? 0 : maxCount,
+      TARKTEE_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded Tarktee camera sources: ${cameras.length} with images (using nearest ${prioritized.length})`,
     );
@@ -1419,7 +1466,7 @@ export function nswCameraToSource(feature) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadNswSourcesFromOpenData() {
+export async function loadNswSourcesFromOpenData({ fullCatalog = false } = {}) {
   try {
     const resp = await fetch(NSW_CAMERAS_URL, {
       headers: {
@@ -1441,7 +1488,9 @@ export async function loadNswSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(900, Math.floor(maxRaw)))
       : DEFAULT_NSW_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, [SYDNEY_CENTER]);
+    const prioritized = prioritizeSources(cameras, fullCatalog ? 0 : maxCount, [
+      SYDNEY_CENTER,
+    ]);
     console.log(
       `[CCTV] Loaded NSW camera sources: ${cameras.length} (using nearest ${prioritized.length})`,
     );
@@ -1589,7 +1638,9 @@ export function calgaryCameraToSource(record) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadCalgarySourcesFromOpenData() {
+export async function loadCalgarySourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   try {
     const endpoint =
       process.env.CCTV_CALGARY_ROWS_URL || DEFAULT_CALGARY_ROWS_URL;
@@ -1634,7 +1685,7 @@ export async function loadCalgarySourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(400, Math.floor(maxRaw)))
       : DEFAULT_CALGARY_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, [
+    const prioritized = prioritizeSources(cameras, fullCatalog ? 0 : maxCount, [
       CALGARY_DOWNTOWN,
     ]);
     console.log(
@@ -1650,7 +1701,9 @@ export async function loadCalgarySourcesFromOpenData() {
   }
 }
 
-export async function loadDelDOTSourcesFromOpenData() {
+export async function loadDelDOTSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   try {
     const resp = await fetch(DELDOT_CCTV_URL, {
       headers: { Accept: 'application/json' },
@@ -1749,7 +1802,11 @@ export async function loadDelDOTSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(400, Math.floor(maxRaw)))
       : DEFAULT_DELDOT_MAX_SOURCES;
-    const prioritized = prioritizeSources(unique, maxCount, DELDOT_ANCHORS);
+    const prioritized = prioritizeSources(
+      unique,
+      fullCatalog ? 0 : maxCount,
+      DELDOT_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded DelDOT camera sources: ${unique.length} Active (using nearest ${prioritized.length})`,
     );
@@ -1859,7 +1916,9 @@ export function vegvesenCameraToSource(feature) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
-export async function loadVegvesenSourcesFromOpenData() {
+export async function loadVegvesenSourcesFromOpenData({
+  fullCatalog = false,
+} = {}) {
   try {
     const endpoint = process.env.CCTV_VEGVESEN_URL || DEFAULT_VEGVESEN_CCTV_URL;
     const resp = await fetch(endpoint, {
@@ -1904,7 +1963,11 @@ export async function loadVegvesenSourcesFromOpenData() {
     const maxCount = Number.isFinite(maxRaw)
       ? Math.max(8, Math.min(1000, Math.floor(maxRaw)))
       : DEFAULT_VEGVESEN_MAX_SOURCES;
-    const prioritized = prioritizeSources(cameras, maxCount, NORWAY_ANCHORS);
+    const prioritized = prioritizeSources(
+      cameras,
+      fullCatalog ? 0 : maxCount,
+      NORWAY_ANCHORS,
+    );
     console.log(
       `[CCTV] Loaded Vegvesen camera sources: ${cameras.length} (using nearest ${prioritized.length})`,
     );

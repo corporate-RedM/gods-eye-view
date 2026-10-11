@@ -21,6 +21,7 @@ export default defineConfig(({ command, mode }) => {
   const getSources = createCctvCatalog({
     sourceRoot: root,
     extraPacks: eyeCameraPacks(),
+    fullCatalog: true,
   });
   const config = createBrowserViteConfig({
     plugins: [

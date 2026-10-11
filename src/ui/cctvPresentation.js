@@ -239,9 +239,45 @@ export function _renderCctvState(state) {
   }
 
   const liveIntent = enabled && !!activeCamera?.isVideo;
+  const externalIntent =
+    enabled && ['iframe', 'external'].includes(activeCamera?.feedType);
+  const externalVisible =
+    externalIntent &&
+    !document.hidden &&
+    !this._cctvPanel?.classList.contains('collapsed');
+  if (
+    this._cctvExternalPanel &&
+    (!externalVisible || this._cctvExternalCameraId !== activeId)
+  ) {
+    this._cctvExternalPanel.remove();
+    this._cctvExternalPanel = null;
+  }
+  if (externalVisible && !this._cctvExternalPanel && this._cctvFrameWrap) {
+    const panel = document.createElement('div');
+    panel.className = 'cctv-external-player';
+    if (activeCamera.embedUrl) {
+      const frame = document.createElement('iframe');
+      frame.title = activeCamera.name;
+      frame.referrerPolicy = 'no-referrer';
+      frame.sandbox = 'allow-scripts allow-same-origin allow-presentation';
+      frame.allow = 'autoplay; fullscreen; picture-in-picture';
+      frame.src = activeCamera.embedUrl;
+      frame.style.cssText = 'width:100%;aspect-ratio:16/9;border:0';
+      panel.append(frame);
+    }
+    const link = document.createElement('a');
+    link.href = activeCamera.externalUrl || activeCamera.embedUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Open camera on operator website';
+    panel.append(link);
+    this._cctvFrameWrap.append(panel);
+    this._cctvExternalPanel = panel;
+    this._cctvExternalCameraId = activeId;
+  }
   if (this._cctvVideo) {
     this._cctvVideo.hidden = !liveIntent;
-    if (this._cctvFrame) this._cctvFrame.hidden = liveIntent;
+    if (this._cctvFrame) this._cctvFrame.hidden = liveIntent || externalIntent;
     const visible =
       liveIntent &&
       !document.hidden &&
@@ -265,7 +301,7 @@ export function _renderCctvState(state) {
   }
 
   if (this._cctvFrame && !liveIntent) {
-    const nextSrc = enabled ? activeCamera?.frameUrl : null;
+    const nextSrc = enabled && !externalIntent ? activeCamera?.frameUrl : null;
     const nextCameraId = enabled ? activeCamera?.id || '' : '';
     const cameraChanged = this._cctvFrame.dataset.cameraId !== nextCameraId;
     const frameLoading = this._cctvFrame.dataset.loading === 'true';

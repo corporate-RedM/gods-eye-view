@@ -181,8 +181,28 @@ export function createEyeWorkspace({
     }
   }
   async function catalogue() {
-    if (!cameras.length)
-      cameras = (await json('/api/cctv/sources')).sources || [];
+    let snapshot;
+    do {
+      snapshot = await json('/api/cctv/sources');
+      cameras = snapshot.sources || [];
+      if (!snapshot.coverage?.loading || snapshot.coverage.snapshotReady) break;
+      const completed = snapshot.coverage.packs.filter(
+        (p) => !['pending', 'loading'].includes(p.state),
+      ).length;
+      report(
+        `Loading full camera inventories: ${completed}/${snapshot.coverage.packs.length} providers · ${cameras.length.toLocaleString()} cameras found`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (signal.aborted) return cameras;
+    } while (true);
+    if (snapshot.coverage) {
+      const unavailable = snapshot.coverage.packs.filter((p) =>
+        ['unavailable', 'stale', 'partial'].includes(p.state),
+      ).length;
+      report(
+        `${cameras.length.toLocaleString()} cameras · ${unavailable} provider inventories unavailable or stale · no camera-count caps`,
+      );
+    }
     return cameras;
   }
   async function reports() {
@@ -340,6 +360,7 @@ export function createEyeWorkspace({
     option(filter, 'all', 'All cameras');
     option(filter, 'live', 'Live video');
     option(filter, 'still', 'Snapshots');
+    option(filter, 'external', 'Embedded / operator website');
     const picker = field(body, 'Camera', 'select');
     const add = button('Add to desk', () => addCamera(picker.value));
     body.append(row(add));
@@ -354,6 +375,26 @@ export function createEyeWorkspace({
     };
     const sources = await catalogue();
     if (!active()) return;
+    let page = 0;
+    const previous = button('Previous cameras', () => {
+      page = Math.max(0, page - 1);
+      render();
+    });
+    const next = button('Next cameras', () => {
+      page++;
+      render();
+    });
+    body.insertBefore(
+      row(
+        previous,
+        next,
+        button('Export provider coverage', async () => {
+          const snapshot = await json('/api/cctv/sources');
+          download('camera-provider-coverage.json', snapshot.coverage);
+        }),
+      ),
+      grid,
+    );
     const render = () => {
       const q = search.value.toLowerCase();
       picker.replaceChildren();
@@ -361,12 +402,19 @@ export function createEyeWorkspace({
         (c) =>
           `${c.name} ${c.city} ${c.provider}`.toLowerCase().includes(q) &&
           (filter.value === 'all' ||
-            (filter.value === 'live') ===
-              ['hls', 'mp4', 'mjpeg'].includes(c.feedType)),
+            (filter.value === 'live' &&
+              ['hls', 'mp4', 'mjpeg'].includes(c.feedType)) ||
+            (filter.value === 'still' && c.feedType === 'image') ||
+            (filter.value === 'external' &&
+              ['iframe', 'external'].includes(c.feedType))),
       );
-      for (const c of found.slice(0, 250))
+      const pages = Math.max(1, Math.ceil(found.length / 250));
+      page = Math.min(page, pages - 1);
+      previous.disabled = page === 0;
+      next.disabled = page >= pages - 1;
+      for (const c of found.slice(page * 250, (page + 1) * 250))
         option(picker, c.id, `${c.city || c.provider} · ${c.name}`);
-      status.textContent = `${found.length.toLocaleString()} matching registered cameras${found.length > 250 ? ' · first 250 shown; narrow your search' : ''}. Availability varies.`;
+      status.textContent = `${found.length.toLocaleString()} matching registered cameras · page ${page + 1} of ${pages}. Availability varies.`;
     };
     search.addEventListener('input', render);
     filter.addEventListener('change', render);
@@ -380,6 +428,47 @@ export function createEyeWorkspace({
       const camera = sources.find((c) => c.id === id);
       if (!camera) return;
       const card = el('article', null, 'eye-camera');
+      if (['iframe', 'external'].includes(camera.feedType)) {
+        const footer = el('footer');
+        footer.append(
+          el('strong', camera.name),
+          note(
+            `${camera.provider} · ${camera.feedType === 'iframe' ? 'Embedded player' : 'Operator website'}. Local frame analysis is unavailable for this player.`,
+          ),
+        );
+        if (camera.embedUrl) {
+          const frame = el('iframe');
+          frame.title = camera.name;
+          frame.referrerPolicy = 'no-referrer';
+          frame.sandbox = 'allow-scripts allow-same-origin allow-presentation';
+          frame.allow = 'autoplay; fullscreen; picture-in-picture';
+          frame.src = camera.embedUrl;
+          card.append(frame);
+        }
+        const link = camera.externalUrl || camera.embedUrl;
+        if (link) {
+          const a = el('a', 'Open operator website');
+          a.href = link;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          footer.append(a);
+        }
+        const release = () => {
+          card.querySelector('iframe')?.remove();
+          card.remove();
+        };
+        open.set(id, release);
+        footer.append(
+          button('Locate', () => fly(camera.lon, camera.lat)),
+          button('Close', () => {
+            release();
+            open.delete(id);
+          }),
+        );
+        card.append(footer);
+        grid.append(card);
+        return;
+      }
       const video = ['hls', 'mp4'].includes(camera.feedType);
       const media = el(video ? 'video' : 'img');
       const canvas = el('canvas');

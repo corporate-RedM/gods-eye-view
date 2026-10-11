@@ -43,8 +43,26 @@ export function createCctvSource({
     return payload;
   }
   return {
-    getCatalog(options) {
-      return read('/api/cctv/sources', 'sources', options);
+    async getCatalog(options = {}) {
+      let payload;
+      do {
+        payload = await read('/api/cctv/sources', 'sources', options);
+        if (!payload.coverage?.loading || payload.coverage.snapshotReady) break;
+        await new Promise((resolve, reject) => {
+          const signal = options.signal;
+          const abort = () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', abort);
+            resolve();
+          }, 2000);
+          signal?.addEventListener('abort', abort, { once: true });
+          if (signal?.aborted) abort();
+        });
+      } while (true);
+      return payload;
     },
     getHealth(options) {
       return read('/api/cctv/health', 'cameras', options);

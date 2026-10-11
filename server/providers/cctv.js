@@ -162,6 +162,9 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
 
         if (url.pathname === '/sources') {
           const body = {
+            ...(getCctvSources.coverage
+              ? { coverage: getCctvSources.coverage() }
+              : {}),
             trimmedPacks: getCctvSources.trimmedPacks?.() ?? [],
             sources: sources.map((source) => ({
               id: source.id,
@@ -180,6 +183,9 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
               mountHeightM: source.mountHeightM,
               groundElevationM: source.groundElevationM,
               feedType: normalizeFeedType(source.feedType),
+              externalUrl: source.externalUrl || '',
+              embedUrl: source.embedUrl || '',
+              aliases: source.aliases || [],
               sourceKind:
                 source.sourceKind || (source.url ? 'configured' : 'fallback'),
               poseSource: source.poseSource,
@@ -240,6 +246,17 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
           const source = sourceById.get(cameraId);
           const mediaUrl = source?.url || '';
           const feedType = normalizeFeedType(source?.feedType || 'image');
+          if (['iframe', 'external'].includes(feedType)) {
+            res.writeHead(422, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error:
+                  'This camera uses an embedded player or operator website.',
+                externalUrl: source.externalUrl || source.embedUrl,
+              }),
+            );
+            return;
+          }
           const leaseId = url.searchParams.get('lease');
           if (feedType === 'hls' && !/^[a-f0-9-]{36}$/i.test(leaseId || '')) {
             res.writeHead(400);
@@ -501,6 +518,19 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
           'camera';
         const source = sourceById.get(cameraId);
         const label = url.searchParams.get('label') || source?.name || cameraId;
+        if (
+          ['iframe', 'external'].includes(source?.feedType) &&
+          !source.snapshotUrl
+        ) {
+          res.writeHead(422, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error:
+                'This camera has no accessible still frame; use its player or operator website.',
+            }),
+          );
+          return;
+        }
         const city = url.searchParams.get('city') || source?.city || '';
         const lat = Number(url.searchParams.get('lat') || source?.lat);
         const lon = Number(url.searchParams.get('lon') || source?.lon);

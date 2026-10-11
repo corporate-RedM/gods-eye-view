@@ -13,6 +13,7 @@ import {
 } from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
 import { labelPackCities } from './places.js';
+import { createFullCatalog } from './fullCatalog.js';
 import { cameraRegion, normalizeSourceItem } from './normalize.js';
 import {
   loadAustinSourcesFromOpenData,
@@ -109,7 +110,7 @@ const LIVE_PACKS = [
   ...CASTLE_ROCK_511_SITES.map((site) => ({
     name: site.pack,
     enabled: () => envEnabled(`CCTV_${site.envKey}_ENABLED`),
-    load: () => loadCastleRock511Sources(site.id),
+    load: (options) => loadCastleRock511Sources(site.id, options),
   })),
   {
     name: 'vegvesen',
@@ -162,8 +163,36 @@ function loadSourcesFromEnv() {
 export function createCctvCatalog({
   sourceRoot = process.cwd(),
   extraPacks = [],
+  fullCatalog = false,
 } = {}) {
   const livePacks = [...LIVE_PACKS, ...extraPacks];
+  if (fullCatalog) {
+    return createFullCatalog({
+      sourceRoot,
+      packs: [
+        ...livePacks,
+        {
+          name: 'file',
+          enabled: () => true,
+          load: () => loadSourcesFromFile(sourceRoot),
+        },
+        { name: 'env', enabled: () => true, load: loadSourcesFromEnv },
+      ],
+      normalize: (name, items) => ({
+        sources: labelPackCities(
+          name,
+          items
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({ ...normalizeSourceItem(item), pack: name }))
+            .filter((item) => item.id),
+          sourceRoot,
+        ),
+      }),
+      decorate: (sources) =>
+        joinGroundHeights(sources, loadGroundHeights(sourceRoot)),
+      ttl: CCTV_SOURCE_CACHE_MS,
+    });
+  }
   /** @type {Array<object>} Cached merged + normalized CCTV source list. */
   let _cctvSourceCache = [];
   /** @type {number} Epoch-ms when the source cache was last refreshed. */
