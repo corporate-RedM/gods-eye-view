@@ -15,6 +15,40 @@ export function resolveCatalogCap(raw) {
   return Math.max(8, Math.min(CCTV_MAX_SOURCES_CEILING, Math.floor(parsed)));
 }
 
+/** Additional operator packs cannot evict existing native-camera coverage. */
+export function allocateExtendedSourceCap(
+  packs,
+  nativeCap,
+  extraNames,
+  extraCap,
+) {
+  const names = new Set(extraNames);
+  const native = allocateSourceCap(
+    packs.filter((p) => !names.has(p.name)),
+    nativeCap,
+  );
+  const existing = new Set(native.sources.map((s) => s.id));
+  const extra = allocateSourceCap(
+    packs
+      .filter((p) => names.has(p.name))
+      .map((p) => ({
+        ...p,
+        sources: p.sources.filter((s) => !existing.has(s.id)),
+      })),
+    Math.max(
+      0,
+      Math.min(extraCap, CCTV_MAX_SOURCES_CEILING - native.sources.length),
+    ),
+  );
+  const byName = new Map(
+    [...native.packs, ...extra.packs].map((p) => [p.name, p]),
+  );
+  return {
+    sources: [...native.sources, ...extra.sources],
+    packs: packs.map((p) => byName.get(p.name)),
+  };
+}
+
 /**
  * Merge source packs under one cap without starving any of them.
  *

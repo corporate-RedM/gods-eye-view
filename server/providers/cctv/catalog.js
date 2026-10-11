@@ -6,10 +6,14 @@ import {
   CASTLE_ROCK_511_SITES,
 } from './constants.js';
 import { loadCastleRock511Sources } from './castleRock511.js';
-import { allocateSourceCap, resolveCatalogCap } from './cap.js';
+import {
+  allocateSourceCap,
+  allocateExtendedSourceCap,
+  resolveCatalogCap,
+} from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
-import { normalizeSourceItem } from './normalize.js';
 import { labelPackCities } from './places.js';
+import { cameraRegion, normalizeSourceItem } from './normalize.js';
 import {
   loadAustinSourcesFromOpenData,
   loadCaltransSourcesFromOpenData,
@@ -24,6 +28,7 @@ import {
   loadNswSourcesFromOpenData,
   loadCalgarySourcesFromOpenData,
   loadDelDOTSourcesFromOpenData,
+  loadVegvesenSourcesFromOpenData,
 } from './sources.js';
 
 /** Env kill switch: unset or anything but "0" means enabled. */
@@ -106,6 +111,11 @@ const LIVE_PACKS = [
     enabled: () => envEnabled(`CCTV_${site.envKey}_ENABLED`),
     load: () => loadCastleRock511Sources(site.id),
   })),
+  {
+    name: 'vegvesen',
+    enabled: () => envEnabled('CCTV_VEGVESEN_ENABLED'),
+    load: loadVegvesenSourcesFromOpenData,
+  },
 ];
 /**
  * Load CCTV sources from a local JSON file (CCTV_SOURCES_FILE env or default).
@@ -149,7 +159,11 @@ function loadSourcesFromEnv() {
 }
 
 /** Create an independent catalog rooted in the consuming application. */
-export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
+export function createCctvCatalog({
+  sourceRoot = process.cwd(),
+  extraPacks = [],
+} = {}) {
+  const livePacks = [...LIVE_PACKS, ...extraPacks];
   /** @type {Array<object>} Cached merged + normalized CCTV source list. */
   let _cctvSourceCache = [];
   /** @type {number} Epoch-ms when the source cache was last refreshed. */
@@ -157,6 +171,9 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
   /** @type {Promise<Array<object>>|null} In-flight refresh, shared by concurrent
    * callers so a post-TTL burst launches ONE refetch, not one per request. */
   let _cctvSourceInflight = null;
+  /** @type {Array<{pack: string, available: number, served: number}>} Packs
+   * that serve fewer cameras than they offer. */
+  let _cctvTrimmedPacks = [];
 
   /**
    * Assemble and cache the merged CCTV source list.
@@ -210,7 +227,7 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
           // Invoked inside the promise so a loader that throws synchronously
           // (a file-based pack on a malformed row) is isolated like any other
           // failed pack instead of rejecting the whole refresh.
-          LIVE_PACKS.map((pack) =>
+          livePacks.map((pack) =>
             Promise.resolve().then(() =>
               pack.enabled() ? pack.load({ sourceRoot }) : [],
             ),
@@ -225,13 +242,17 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
         name,
         items
           .filter((item) => item && typeof item === 'object')
-          .map((item) => normalizeSourceItem(item))
+          .map((item) => ({ ...normalizeSourceItem(item), pack: name }))
           .filter((item) => item.id),
         sourceRoot,
       ),
+      available: Number.isFinite(items.available)
+        ? items.available
+        : items.length,
+      region: items.region ?? null,
     });
     const packs = [
-      ...LIVE_PACKS.map((pack, index) =>
+      ...livePacks.map((pack, index) =>
         normalizePack(
           pack.name,
           liveResults[index]?.status === 'fulfilled'
@@ -243,7 +264,17 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
       normalizePack('env', fromEnv),
     ];
     const maxCount = resolveCatalogCap(process.env.CCTV_MAX_SOURCES);
-    const allocation = allocateSourceCap(packs, maxCount);
+    const allocation = extraPacks.length
+      ? allocateExtendedSourceCap(
+          packs,
+          maxCount,
+          extraPacks.map((p) => p.name),
+          Math.min(
+            10000,
+            Math.max(0, Number(process.env.EYE_EXTRA_CAMERA_CAP) || 5000),
+          ),
+        )
+      : allocateSourceCap(packs, maxCount);
     // Shipped ground heights (src/data/local_data/cctv_ground_heights/, produced by
     // scripts/precompute-cctv-heights.mjs) ride along on the served source so
     // the client can place a camera and its monitor plane with zero sampling.
@@ -252,6 +283,16 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
       loadGroundHeights(sourceRoot),
     );
     const trimmed = allocation.packs.filter((pack) => pack.kept < pack.offered);
+    // Each pack's own nearest-first cap and the shared catalog cap both trim.
+    const trimmedPacks = packs
+      .map((pack, index) => ({
+        pack: pack.name,
+        available: Math.max(pack.available, allocation.packs[index].offered),
+        served: allocation.packs[index].kept,
+        // Where the pack's cameras are, including those not served.
+        region: pack.region ?? cameraRegion(pack.sources),
+      }))
+      .filter((pack) => pack.served < pack.available);
     if (trimmed.length) {
       const detail = trimmed
         .map((pack) => `${pack.name} ${pack.kept}/${pack.offered}`)
@@ -262,6 +303,7 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
     }
     if (capped.length > 0 || _cctvSourceCache.length === 0) {
       _cctvSourceCache = capped;
+      _cctvTrimmedPacks = trimmedPacks;
     } else {
       // Every source came back empty (all live packs timed out / upstream outage)
       // but a good catalog is already cached — serve it stale rather than blanking
@@ -275,5 +317,7 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
     return _cctvSourceCache;
   }
 
+  /** Packs serving fewer cameras than they offer, as of the last refresh. */
+  getCctvSources.trimmedPacks = () => _cctvTrimmedPacks;
   return getCctvSources;
 }

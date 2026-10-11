@@ -1,0 +1,195 @@
+// Adapted from OSIRIS (MIT), commit 83b8cd1. See docs/OSIRIS-NOTICE.md.
+import { NextResponse } from '../../../next-shim.js';
+import { ATTRIBUTION } from '../../../lib/nominatim.js';
+import { httpJson } from '../../../lib/httpJson.js';
+import { cachedSource } from '../../../lib/sourceCache.js';
+const PLACE_TTL_MS = 24 * 60 * 60 * 1000;
+export async function placeAt(lat, lng) {
+    const at = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    const rows = await cachedSource(`dossier:place:${at}`, async () => {
+        /* One retry. Photon's public server answers 503 in short bursts — two in
+           a row were seen while this was being tested, and it was answering again
+           seconds later — and a single miss would otherwise be an empty panel. */
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                /* radius=50 (km). Photon names the nearest OpenStreetMap object, and by
+                   default looks only a short way — farmland outside Granby, the Sahara,
+                   Siberia and the Amazon all came back with nothing, so the dossier
+                   was empty for most of the world's land. Fifty is the smallest radius
+                   that found a place for each; the nearest still wins, so a click in a
+                   city names that city. */
+                const json = await httpJson(`https://photon.komoot.io/reverse?lat=${lat.toFixed(3)}&lon=${lng.toFixed(3)}&lang=en&radius=50`, { timeoutMs: 8000 });
+                const found = json.features?.[0]?.properties;
+                return found ? [found] : []; // open sea has no place, and no dossier
+            }
+            catch (e) {
+                console.warn(`[OSIRIS] Photon reverse failed (attempt ${attempt}):`, e instanceof Error ? e.message : e);
+                if (attempt === 1)
+                    await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        }
+        return [];
+    }, PLACE_TTL_MS)();
+    return rows[0] ?? null;
+}
+/*
+ * The country facts come from Wikidata, read through its REST API rather than
+ * query.wikidata.org.
+ *
+ * The SPARQL endpoint refuses or times out far more often than it answers — on
+ * 21 Sep 2026 it did not respond at all within 25s — and when it failed it took
+ * the whole country block of this panel down with it, so a right-click showed
+ * nothing but a place name. An item's own statements answer the same questions
+ * in one request, and a country's facts change slowly, so each is kept for a day.
+ */
+const WD_REST = 'https://www.wikidata.org/w/rest.php/wikibase/v1/entities/items';
+const WD_TTL_MS = 24 * 60 * 60 * 1000;
+const WD_TIMEOUT_MS = 8000;
+/** Qualifier: the date a statement stopped being true. */
+const ENDED = 'P582';
+/** The statements that still hold — a president who left office is not the president. */
+export const stillHolding = (list = []) => list.filter(s => !s.qualifiers?.some(q => q.property.id === ENDED));
+/** The one that holds now: Wikidata's own preferred rank, else one that has not ended. */
+export const current = (list) => list?.find(s => s.rank === 'preferred') ?? stillHolding(list)[0] ?? list?.[0];
+/** A statement points at another item by id, or carries a quantity. */
+export const itemId = (s) => (typeof s?.value?.content === 'string' ? s.value.content : '');
+export const amountOf = (s) => {
+    const raw = s?.value?.content?.amount;
+    const n = raw === undefined ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+};
+const statementsOf = (id, property) => httpJson(`${WD_REST}/${id}/statements${property ? `?property=${property}` : ''}`, { timeoutMs: WD_TIMEOUT_MS });
+/** English names for a batch of item ids, in one request. */
+async function labelsFor(ids) {
+    const wanted = [...new Set(ids.filter(Boolean))];
+    if (!wanted.length)
+        return {};
+    const json = await httpJson(`https://www.wikidata.org/w/api.php?action=wbgetentities&props=labels&languages=en&format=json&ids=${wanted.join('|')}`, { timeoutMs: WD_TIMEOUT_MS });
+    const out = {};
+    for (const [id, entity] of Object.entries(json.entities ?? {})) {
+        if (entity.labels?.en?.value)
+            out[id] = entity.labels.en.value;
+    }
+    return out;
+}
+/** What Wikidata knows about a country, as the panel wants it. */
+async function readCountry(countryName) {
+    // The English Wikipedia article for a place names the Wikidata item for it.
+    const pages = await httpJson(`https://en.wikipedia.org/w/api.php?action=query&prop=pageprops&ppprop=wikibase_item&redirects=1&format=json&titles=${encodeURIComponent(countryName)}`, { timeoutMs: WD_TIMEOUT_MS });
+    const qid = Object.values(pages.query?.pages ?? {})[0]?.pageprops?.wikibase_item;
+    if (!qid)
+        return [];
+    const s = await statementsOf(qid);
+    const capital = itemId(current(s.P36));
+    const continent = itemId(current(s.P30));
+    const languages = stillHolding(s.P37).map(itemId).filter(Boolean).slice(0, 4);
+    const currencies = stillHolding(s.P38).map(itemId).filter(Boolean).slice(0, 3);
+    const leader = itemId(current(s.P35));
+    /* The office is read from the country, not from the person. Charles III holds
+       several crowns at once, and his own item lists the British one first, which
+       would caption a dossier about Australia "monarch of the United Kingdom". */
+    const position = itemId(current(s.P1906));
+    const flagFile = itemId(current(s.P41));
+    const name = await labelsFor([capital, continent, leader, position, ...languages, ...currencies]);
+    return [{
+            country: {
+                name: countryName,
+                official_name: countryName,
+                capital: name[capital],
+                population: amountOf(current(s.P1082)),
+                area: amountOf(current(s.P2046)),
+                region: name[continent],
+                subregion: name[continent],
+                languages: languages.map(id => name[id]).filter(Boolean),
+                currencies: currencies.map(id => name[id]).filter(Boolean),
+                flag_url: flagFile ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(flagFile)}` : undefined,
+                timezones: [],
+            },
+            head_of_state: leader && name[leader]
+                ? { name: name[leader], position: name[position] || 'Head of State' }
+                : null,
+        }];
+}
+export async function GET(request) {
+    const { searchParams } = new URL(request.url);
+    const lat = parseFloat(searchParams.get('lat') || '0');
+    const lng = parseFloat(searchParams.get('lng') || '0');
+    try {
+        // Step 1: Which place was clicked (must complete first — other steps depend on it).
+        const place = await placeAt(lat, lng);
+        let countryName = '';
+        let countryCode = '';
+        let locationInfo = {};
+        if (place) {
+            countryName = place.country || '';
+            countryCode = (place.countrycode || '').toUpperCase();
+            locationInfo = {
+                city: place.city || '',
+                state: place.state || '',
+                country: countryName,
+                country_code: countryCode,
+                // Photon's own `name` is the nearest building or street, not the place.
+                // A city-state is its own country, and "Singapore, Singapore" says it twice.
+                display_name: [...new Set([place.city, place.state, countryName].filter(Boolean))].join(', '),
+            };
+        }
+        // Steps 2-3: Run in PARALLEL after geocode
+        const [wikiResult, wdResult] = await Promise.allSettled([
+            // Step 2: Fetch Wikipedia summary
+            (async () => {
+                const wikiQuery = locationInfo.city || countryName;
+                if (!wikiQuery)
+                    return null;
+                try {
+                    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiQuery)}`, { signal: AbortSignal.timeout(5000) });
+                    if (res.ok) {
+                        const wiki = await res.json();
+                        return {
+                            title: wiki.title,
+                            extract: wiki.extract?.substring(0, 500),
+                            thumbnail: wiki.thumbnail?.source,
+                        };
+                    }
+                }
+                catch (e) {
+                    console.warn('[OSIRIS] Wikipedia fetch error:', e instanceof Error ? e.message : e);
+                }
+                return null;
+            })(),
+            /* Step 3: Country facts and head of state. Cached for a day per country,
+               which also keeps a burst of right-clicks off Wikidata. */
+            countryName
+                ? cachedSource(`dossier:wd:${countryName}`, () => readCountry(countryName), WD_TTL_MS)()
+                    .then(rows => rows[0] ?? null)
+                : Promise.resolve(null),
+        ]);
+        const wikiSummary = wikiResult.status === 'fulfilled' ? wikiResult.value : null;
+        const facts = wdResult.status === 'fulfilled' ? wdResult.value : null;
+        const countryData = facts?.country ?? null;
+        const headOfState = facts?.head_of_state ?? null;
+        return NextResponse.json({
+            coordinates: { lat, lng },
+            location: locationInfo,
+            country: countryData,
+            head_of_state: headOfState,
+            wikipedia: wikiSummary,
+            /** The place this dossier is about was named by OpenStreetMap. */
+            attribution: ATTRIBUTION,
+            timestamp: new Date().toISOString(),
+        }, {
+            headers: {
+                /* Only a dossier that found its place is worth keeping. An empty one
+                   is either open sea or a lookup that failed — Photon has its bad
+                   moments — and cached publicly it would be handed back for an hour,
+                   stale-while-revalidate, to the next click on that spot. */
+                'Cache-Control': place
+                    ? 'public, s-maxage=3600, stale-while-revalidate=7200'
+                    : 'no-store',
+            },
+        });
+    }
+    catch (error) {
+        console.error('Region dossier error:', error);
+        return NextResponse.json({ error: 'Failed to fetch region data' }, { status: 500 });
+    }
+}

@@ -27,37 +27,21 @@ import { createRetryableLoader } from './retryableLoad.js';
 const PACKS = {
   countries: {
     url: new URL('./local_data/natural_earth/countries.json', import.meta.url),
-    importJson: () =>
-      import('./local_data/natural_earth/countries.json', {
-        with: { type: 'json' },
-      }),
   },
   states: {
     url: new URL(
       './local_data/natural_earth/states_provinces.json',
       import.meta.url,
     ),
-    importJson: () =>
-      import('./local_data/natural_earth/states_provinces.json', {
-        with: { type: 'json' },
-      }),
   },
   marine: {
     url: new URL('./local_data/natural_earth/marine.json', import.meta.url),
-    importJson: () =>
-      import('./local_data/natural_earth/marine.json', {
-        with: { type: 'json' },
-      }),
   },
   places: {
     url: new URL(
       './local_data/natural_earth/populated_places.json',
       import.meta.url,
     ),
-    importJson: () =>
-      import('./local_data/natural_earth/populated_places.json', {
-        with: { type: 'json' },
-      }),
   },
 };
 
@@ -510,7 +494,7 @@ function indexMarine(pack) {
  * @param {(name: keyof PACKS) => Promise<object>} [options.loadPack] - Test seam.
  */
 export function createPlaceLocator({
-  loadPack = (name) => loadBundledJson(PACKS[name].url, PACKS[name].importJson),
+  loadPack = (name) => loadBundledJson(PACKS[name].url),
 } = {}) {
   let countries = null;
   let states = null;
