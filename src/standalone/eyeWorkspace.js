@@ -9,6 +9,11 @@ import {
   validArea,
 } from './eyeModel.js';
 import './eye.css';
+import {
+  createExtraPanels,
+  createForecastPlayback,
+  renderRecord,
+} from './eyeExtras.js';
 
 const el = (tag, text, cls) => {
   const n = document.createElement(tag);
@@ -135,13 +140,37 @@ export function createEyeWorkspace({
   let news = [];
   let run = null;
   let eventSource = null;
+  const extras = createExtraPanels({
+    body,
+    el,
+    button,
+    field,
+    option,
+    row,
+    note,
+    json,
+    report: (...args) => report(...args),
+    viewer,
+    fly,
+    data,
+    show,
+    reports,
+    loadToolCatalog,
+    defer,
+    setCleanup: (cleanup) => {
+      tabCleanup = cleanup;
+    },
+  });
   const panels = {
     Overview: overview,
     News: newsPanel,
+    Broadcasts: extras.broadcastPanel,
+    Conflicts: extras.conflictPanel,
     Cameras: cameraPanel,
     Areas: areaPanel,
     Investigate: investigationPanel,
     Forecast: forecastPanel,
+    Assistant: extras.assistantPanel,
     Tools: toolsPanel,
   };
   const buttons = new Map();
@@ -804,11 +833,11 @@ export function createEyeWorkspace({
     }
     render();
   }
-  function investigationPanel() {
+  function investigationPanel(active) {
     body.append(
       el('h3', 'Investigate public records'),
       note(
-        'Queries public services. Results keep their source fields and timestamps. Active port scanning is not enabled.',
+        'Queries public services. Results keep their source fields and timestamps. TCP checks run only when you select them and press Start TCP check.',
       ),
     );
     const kind = field(body, 'Record type', 'select');
@@ -820,22 +849,49 @@ export function createEyeWorkspace({
       cve: 'Vulnerability (CVE)',
       crypto: 'Bitcoin / Ethereum wallet',
       sanctions: 'Sanctions records',
+      scan: 'TCP ports and service banners',
     }))
       option(kind, id, label);
     const input = field(body, 'Domain, address, CVE ID or name');
     input.placeholder = 'example.com';
-    const output = el('pre');
+    const ports = field(body, 'TCP ports (comma separated; up to 32)');
+    ports.value = '22,80,443,3389,8080';
+    ports.parentElement.hidden = true;
+    const output = el('div');
+    let resultData;
+    let request;
+    kind.addEventListener('change', () => {
+      ports.parentElement.hidden = kind.value !== 'scan';
+      go.textContent = kind.value === 'scan' ? 'Start TCP check' : 'Look up';
+    });
+    tabCleanup = () => request?.abort();
     const go = button('Look up', async () => {
       go.disabled = true;
       output.textContent = 'Looking up public records…';
       try {
-        const catalog = await loadToolCatalog();
-        const result = await catalog.call(
-          'eye_investigate',
-          { kind: kind.value, query: input.value.trim() },
-          { signal },
-        );
-        output.textContent = JSON.stringify(result.data, null, 2);
+        request = new AbortController();
+        if (kind.value === 'scan') {
+          resultData = await json('/api/eye/scan', {
+            method: 'POST',
+            signal: request.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              host: input.value.trim(),
+              ports: ports.value.split(',').map((p) => Number(p.trim())),
+            }),
+          });
+        } else {
+          const catalog = await loadToolCatalog();
+          const result = await catalog.call(
+            'eye_investigate',
+            { kind: kind.value, query: input.value.trim() },
+            { signal: request.signal },
+          );
+          resultData = result.data;
+        }
+        if (!active()) return;
+        output.replaceChildren();
+        renderRecord(output, resultData);
       } catch (e) {
         output.textContent = e.message;
       } finally {
@@ -845,8 +901,9 @@ export function createEyeWorkspace({
     body.append(
       row(
         go,
+        button('Stop', () => request?.abort()),
         button('Export result', () =>
-          download('childs-eye-investigation.json', output.textContent),
+          download('childs-eye-investigation.json', resultData || {}),
         ),
       ),
       output,
@@ -878,6 +935,37 @@ export function createEyeWorkspace({
     const question = field(body, 'Research question', 'textarea');
     question.placeholder =
       'What could change traffic disruption in this area over the next week?';
+    const seed = field(
+      body,
+      'Your context (paste text, CSV, JSON or Markdown)',
+      'textarea',
+    );
+    seed.maxLength = 100000;
+    const file = field(body, 'Load context file');
+    file.type = 'file';
+    file.accept = '.txt,.csv,.json,.md,.log,.html';
+    file.addEventListener('change', async () => {
+      const selected = file.files?.[0];
+      if (!selected) return;
+      if (selected.size > 400000)
+        return report('Use a text file under 400 KB and 100,000 characters.');
+      const text = await selected.text();
+      if (text.length > 100000)
+        return report(
+          'Context exceeds 100,000 characters. Shorten it before loading.',
+        );
+      if (active()) {
+        seed.value = text;
+        estimateText();
+      }
+    });
+    const scope = field(body, 'Context use', 'select');
+    option(scope, 'brief', 'Read once when building the world');
+    option(
+      scope,
+      'panel',
+      'Also show the first 8,000 characters to actors each period',
+    );
     const depth = field(body, 'Depth', 'select');
     for (const d of config.depths)
       option(depth, d.id, `${d.id} · about ${d.model_calls} model calls`);
@@ -886,12 +974,78 @@ export function createEyeWorkspace({
     const estimateText = () => {
       const d = config.depths.find((d) => d.id === depth.value);
       estimate.textContent = `Estimated ${d?.model_calls} model calls, plus public-source research. Token usage and dollar cost depend on your provider, model and response lengths. This is not a dollar quote. One run at a time; cancel stops future work but cannot undo billed calls.`;
+      const settings = {
+        quick: [4, 3, 2],
+        standard: [6, 4, 3],
+        deep: [7, 4, 4],
+      }[depth.value];
+      const reads =
+        scope.value === 'panel' ? settings.reduce((a, b) => a * b, 1) + 1 : 0;
+      estimate.textContent += ` Your context adds approximately ${Math.ceil(seed.value.length / 4) + Math.ceil(Math.min(seed.value.length, 8000) / 4) * reads} input tokens before retries.`;
     };
     depth.addEventListener('change', estimateText);
+    seed.addEventListener('input', estimateText);
+    scope.addEventListener('change', estimateText);
     estimateText();
     body.append(estimate);
     const progress = el('pre');
     const output = el('div');
+    const playbackBox = el('section');
+    const playback = createForecastPlayback({
+      parent: playbackBox,
+      viewer,
+      fly,
+      el,
+      field,
+      option,
+      button,
+      row,
+      note,
+    });
+    const steering = field(
+      body,
+      'Event to inject or follow-up question',
+      'textarea',
+    );
+    const answer = el('div');
+    const runRequest = async (operation) => {
+      const currentRun = run || readSaved('childs-eye.last-run', null);
+      if (!currentRun?.id || !steering.value.trim())
+        return report('Choose a run and enter a message.');
+      try {
+        const result = await json(
+          `/api/eye/oi/runs/${currentRun.id}/${operation}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-OI-Run-Token': currentRun.run_token || currentRun.token,
+              'X-OI-Key': key.value.trim(),
+              'X-OI-Provider': provider.value,
+              'X-OI-Model': model.value.trim(),
+            },
+            body: JSON.stringify(
+              operation === 'inject'
+                ? { text: steering.value }
+                : { target: 'report', message: steering.value },
+            ),
+          },
+        );
+        if (active()) {
+          answer.replaceChildren();
+          renderRecord(answer, result);
+        }
+      } catch (e) {
+        report(e);
+      }
+    };
+    body.append(
+      row(
+        button('Inject into next period', () => runRequest('inject')),
+        button('Ask about run (uses entered key)', () => runRequest('ask')),
+      ),
+      answer,
+    );
     const start = button('Start research', async () => {
       if (!key.value.trim() || question.value.trim().length < 8)
         return report('Enter a provider key and a research question first.');
@@ -908,13 +1062,15 @@ export function createEyeWorkspace({
           body: JSON.stringify({
             question: question.value,
             depth: depth.value,
+            seed: seed.value,
+            seed_scope: scope.value,
             use_feeds: true,
           }),
         });
         key.value = '';
         run = result;
         save('childs-eye.last-run', { id: result.id, token: result.run_token });
-        attach(result.id);
+        if (active()) attach(result.id);
       } catch (e) {
         report(e);
         start.disabled = false;
@@ -952,6 +1108,7 @@ export function createEyeWorkspace({
         }),
       ),
       progress,
+      playbackBox,
       output,
     );
     function attach(id) {
@@ -1000,6 +1157,7 @@ export function createEyeWorkspace({
         try {
           const result = await json(`/api/eye/oi/runs/${id}`);
           if (!active()) return;
+          playback.update(result.worlds);
           output.replaceChildren(
             el('h3', result.phase_label || result.status),
             note(
@@ -1072,6 +1230,7 @@ export function createEyeWorkspace({
         eventSource = null;
         clearInterval(poll);
         key.value = '';
+        playback.dispose();
       };
     }
     const saved = run || readSaved('childs-eye.last-run', null);
@@ -1079,6 +1238,7 @@ export function createEyeWorkspace({
     else
       tabCleanup = () => {
         key.value = '';
+        playback.dispose();
       };
   }
   async function toolsPanel(active) {

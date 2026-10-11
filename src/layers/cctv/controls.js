@@ -364,6 +364,7 @@ export function createControls({ state: layerState, services, parts, source }) {
     focusNearest(options = {}) {
       const nearest = parts.navigation.nearestCameraIdToViewer(
         options.feed ?? layerState._feedFilter,
+        options.excludeCurrent === true,
       );
       if (!nearest) return null;
       parts.selection.setActiveCamera(nearest);

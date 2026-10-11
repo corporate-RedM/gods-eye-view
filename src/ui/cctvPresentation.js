@@ -80,7 +80,20 @@ export function _renderCctvState(state) {
     const feedFilter = this._cctvFeedFilter?.value || 'all';
     const matchesFilter = (cam) =>
       feedFilter === 'all' || (feedFilter === 'live') === !!cam.isVideo;
-    const listed = cameras.filter(matchesFilter);
+    const query = (this._cctvSearch?.value || '').trim().toLowerCase();
+    const matches = cameras.filter(
+      (cam) =>
+        matchesFilter(cam) &&
+        (!query ||
+          `${cam.city} ${cam.name} ${cam.id}`.toLowerCase().includes(query)),
+    );
+    // Keep every record searchable without creating 160,000 option nodes.
+    const listed = matches.slice(0, 250);
+    const selected = cameras.find((cam) => cam.id === activeId);
+    if (selected && matchesFilter(selected) && !listed.includes(selected))
+      listed.push(selected);
+    if (this._cctvSearch)
+      this._cctvSearch.placeholder = `Search all ${cameras.length.toLocaleString()} cameras (${matches.length.toLocaleString()} matches)`;
     // isVideo and liveFailed are part of the signature: a stream that falls
     // back to its still image moves the camera from Live video to Snapshots,
     // labelled LIVE OFFLINE.

@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 import { isLocalMcpRequest } from '../mcp/plugin.js';
 
 const modules = {
+  'assistant/route.js': () => import('./eye-assistant.js'),
+  'scan/route.js': () => import('./eye-scan.js'),
   'news/route.js': () =>
     import('../../integrations/osiris/app/api/news/route.js'),
   'region-dossier/route.js': () =>
@@ -33,6 +35,8 @@ const modules = {
     import('../../integrations/osiris/app/api/osint/sanctions/route.js'),
 };
 const routes = new Set([
+  'assistant',
+  'scan',
   'news',
   'region-dossier',
   'oi',
@@ -98,6 +102,8 @@ export function eyeApiPlugin({ getSources } = {}) {
           if (size > 240_000) return respond(413, 'Request too large.');
           chunks.push(chunk);
         }
+        // The body deadline must not cut off a model response or SSE stream.
+        req.setTimeout(0);
         const module = await modules[route.module]();
         if (typeof module[req.method] !== 'function')
           return respond(405, 'Method not supported.');

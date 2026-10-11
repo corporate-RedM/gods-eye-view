@@ -328,7 +328,7 @@ export function runSummary(run, origin) {
                 view: p ? pointView(p, s.frame) : undefined,
                 outcome: s.frame && p ? worldOutcome(s.frame, p) : undefined,
                 note: p?.note,
-                events: s.events.filter(e => e.world === w).map(e => ({ date: e.date, title: e.title, detail: e.detail, kind: e.kind, actors: e.actors, place: e.place || undefined })),
+                events: s.events.filter(e => e.world === w).map(e => ({ date: e.date, title: e.title, detail: e.detail, kind: e.kind, actors: e.actors, place: e.place || undefined, lat: e.lat, lng: e.lng })),
             };
         }),
         injected: s.injects,

@@ -1,3 +1,5 @@
+import { nearbyCameras } from './nearby.js';
+
 export function createIngestion({
   state: layerState,
   services,
@@ -32,9 +34,12 @@ export function createIngestion({
         // projectionTilesReady() is false while a (hidden) Google tileset
         // exists, so this latch effectively fires for the google-3d regime —
         // terrain-globe records resolve from the prior in their drain pass.
-        const unresolved = layerState._records.filter(
-          (record) => !parts.ground.isGroundResolved(record),
-        );
+        const unresolved = nearbyCameras(
+          layerState._records,
+          layerState._viewer,
+          256,
+          (record) => record.camera,
+        ).filter((record) => !parts.ground.isGroundResolved(record));
         if (unresolved.length)
           parts.geometryQueue.enqueueGeometryRefresh(unresolved);
       }

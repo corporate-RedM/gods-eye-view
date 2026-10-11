@@ -3,6 +3,7 @@ import {
   planeSupportPoints,
   poseHash,
 } from '../../data/cctvFootprint.js';
+import { nearbyCameras } from './nearby.js';
 
 /** Cooldown before a provisional (geoid-fallback / partial) footprint is retried. */
 const FOOTPRINT_RETRY_MS = 60_000;
@@ -162,7 +163,8 @@ export function createGround({ state: layerState, services, parts, source }) {
 
   async function resolveGroundPriors(catalog) {
     try {
-      const coords = catalog.map((camera) => {
+      const nearby = nearbyCameras(catalog, layerState._viewer);
+      const coords = nearby.map((camera) => {
         const ortho = Number(camera.groundElevationM);
         return {
           lat: camera.lat,
@@ -170,7 +172,14 @@ export function createGround({ state: layerState, services, parts, source }) {
           ...(Number.isFinite(ortho) ? { sourceOrthometricM: ortho } : {}),
         };
       });
-      return await resolveEllipsoidalGround(coords);
+      const priors = await resolveEllipsoidalGround(coords, {
+        signal: layerState._sourceAbort?.signal,
+      });
+      if (nearby === catalog) return priors;
+      const byCamera = new Map(
+        nearby.map((camera, index) => [camera, priors[index]]),
+      );
+      return catalog.map((camera) => byCamera.get(camera) || null);
     } catch (error) {
       console.warn(
         '[Data:CCTV] ground-prior batch failed (keeping catalog fallbacks):',
@@ -178,6 +187,25 @@ export function createGround({ state: layerState, services, parts, source }) {
       );
       return null;
     }
+  }
+
+  function warmNearbyGround(records) {
+    const pending = records.filter(
+      (r) => !r.groundPrior && !r.groundPriorPending,
+    );
+    if (!pending.length) return;
+    pending.forEach((r) => {
+      r.groundPriorPending = true;
+    });
+    resolveGroundPriors(pending.map((r) => r.camera))
+      .then((priors) => {
+        if (priors) applyLateGroundPriors(pending, priors);
+      })
+      .finally(() =>
+        pending.forEach((r) => {
+          r.groundPriorPending = false;
+        }),
+      );
   }
 
   /**
@@ -250,6 +278,11 @@ export function createGround({ state: layerState, services, parts, source }) {
     layerState._lastAppliedRegime = regime;
 
     for (const record of layerState._records) {
+      if (
+        !record.frustumGeometry &&
+        record.camera.id !== layerState._activeCameraId
+      )
+        continue;
       if (regime === 'terrain-globe') {
         // Prior IS the resolution — latch it (zero scene queries).
         record.groundSamples['terrain-globe'] = groundPriorAltFor(record);
@@ -357,6 +390,7 @@ export function createGround({ state: layerState, services, parts, source }) {
     rearmGroundResolution,
     resolveCommittedGroundAnchor,
     resolveGroundPriors,
+    warmNearbyGround,
     applyLateGroundPriors,
     handleMapStackChanged,
   };

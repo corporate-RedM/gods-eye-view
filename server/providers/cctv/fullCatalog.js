@@ -18,6 +18,14 @@ export function createFullCatalog({
     ]),
   );
   let snapshotReady = false;
+  let rebuildTimer;
+  const scheduleRebuild = () => {
+    if (rebuildTimer) return;
+    rebuildTimer = setTimeout(() => {
+      rebuildTimer = null;
+      rebuild();
+    }, 1000);
+  };
   let inflight,
     refreshed = 0,
     merged = [],
@@ -129,11 +137,13 @@ export function createFullCatalog({
         } finally {
           clearTimeout(deadline);
         }
-        rebuild();
+        scheduleRebuild();
       }
     };
     inflight = Promise.all(Array.from({ length: concurrency }, worker))
       .then(() => {
+        clearTimeout(rebuildTimer);
+        rebuildTimer = null;
         rebuild();
         refreshed = Date.now();
         snapshotReady = true;

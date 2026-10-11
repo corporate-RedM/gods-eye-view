@@ -50,14 +50,27 @@ export function createNavigation({
    * @returns {string|null} Camera ID of the nearest camera, or null.
    */
 
-  function nearestCameraIdToViewer(feed) {
-    const carto = layerState._viewer?.camera?.positionCartographic;
+  function nearestCameraIdToViewer(feed, excludeCurrent = false) {
+    const viewer = layerState._viewer;
+    let carto = viewer?.camera?.positionCartographic;
+    // A tilted view can look kilometres away from the viewer's nadir.
+    // NEAREST refers to the area being viewed, not the observer's location.
+    const canvas = viewer?.scene?.canvas;
+    if (canvas && viewer.camera.pickEllipsoid) {
+      const hit = viewer.camera.pickEllipsoid(
+        new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2),
+        Cesium.Ellipsoid.WGS84,
+      );
+      if (hit) carto = Cesium.Cartographic.fromCartesian(hit);
+    }
     if (!carto || !layerState._records.length) return null;
     const lat = Cesium.Math.toDegrees(carto.latitude);
     const lon = Cesium.Math.toDegrees(carto.longitude);
 
     let best = null;
     for (const record of layerState._records) {
+      if (excludeCurrent && record.camera.id === layerState._activeCameraId)
+        continue;
       if (!recordMatchesFeed(record, feed)) continue;
       const distKm = parts.model.haversineKm(
         lat,

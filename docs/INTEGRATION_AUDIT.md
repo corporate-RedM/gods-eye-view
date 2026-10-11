@@ -53,4 +53,52 @@ The coverage JSON, browser check and screenshots are under
 `output/camera-coverage/`. The browser test compares catalogue and actual globe
 counts, checks pagination, embedded players, operator links and player cleanup.
 Source inventories persist across restarts, and failed/partial refreshes retain
-previous records. The other gaps in the table remain open.
+previous records. The next section records the follow-up implementation.
+
+## Completion and CCTV regression repair
+
+The first-delivery table above is historical. The following gaps now have native
+Child's Eye implementations; the separate Osiris server is not needed:
+
+- Conversational Assistant with provider/key selection, shared query tools,
+  globe movement, layer toggles, workspace navigation, cancellation and a bounded
+  tool loop. No paid forecast or active network scan starts through this loop.
+- Forecast text/file context, input-token estimates, brief/panel context scope,
+  event injection, follow-up questions, and world/event playback on the globe.
+  Forecast event exports now retain coordinates instead of discarding them.
+- All 23 frontend broadcast channels and all 15 conflict-region anchors from the
+  pinned Osiris source. The earlier table's 13 conflict zones was an inaccurate
+  count. Region matches use actual source headlines, without fabricating exact
+  event coordinates. Users can retain these overlays on the globe.
+- Expandable investigation results, linked source fields, raw JSON export,
+  and an explicitly started TCP connection/passive-banner check with cancellation.
+
+CCTV Nearest now selects a different matching feed near the view centre, with
+viewer position as the fallback when looking off the globe. The Focus control
+continues to return to the selected feed. Search retains access to every record;
+only visible DOM suggestions are bounded. The camera index is reused by frame
+and media requests until the catalogue changes, and provider completions are
+coalesced before rebuilding the inventory. Terrain work is limited to nearby
+cameras and the selection, and follows camera movement.
+
+The sequential headless comparison measured CCTV activation at **20,429 ms before
+and 10,808 ms after**, with 78,956 and 80,026 available records respectively.
+Dropdown options dropped from 78,956 to 250; terrain refinement queued 256 local
+records instead of all 78,956. These are single-run SwiftShader measurements,
+not guarantees for BK's GPU. A separate 30-request local frame-route comparison
+measured median overhead of **21.18 ms before and 0.81 ms after** (95th percentiles
+33.33 ms and 1.34 ms). That isolates local routing and does not measure upstream
+camera download time. Cold provider collection still depends on external
+services; persisted inventories avoid that wait on ordinary restarts.
+
+Evidence is in `output/completion/`: browser control/assistant checks, scenario
+file/injection/question/playback checks, conflict cleanup, screenshots and the
+startup timing comparison. Model endpoints in browser tests were intercepted;
+server orchestration uses scripted fixtures. The TCP check is tested against an
+owned local service. No paid inference was performed.
+
+Provider-dependent limits remain explicit: there is no configured Mapillary token
+for live street photography, no new photorealistic building-mesh subscription,
+and no hardware FPS benchmark. Free satellite imagery and terrain, graphics
+presets, and upstream Street Level integration remain available. Those limits
+must not be represented as verified live imagery or free Google buildings.

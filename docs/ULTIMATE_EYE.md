@@ -14,8 +14,8 @@ loopback and use the installed Node 24 runtime. Neither opens a browser window.
 Keep each server in a monitored terminal task; stopping that task stops its app.
 `PORT=4174 childs-eye` or `PORT=3006 osiris` overrides the respective port.
 
-The **Workspace** button opens the Intelligence desk: Overview, News, Cameras, Areas,
-Investigate, Forecast, and Tools. Child's Eye operates independently of the
+The **Workspace** button opens the Intelligence desk: Overview, News, Broadcasts,
+Conflicts, Cameras, Areas, Investigate, Forecast, Assistant, and Tools. Child's Eye operates independently of the
 Osiris server. The original globe controls, voice tools, layers, and AI Watch
 remain available.
 
@@ -41,7 +41,10 @@ remain available.
 - Areas can save the current view or a drawn polygon, query available records,
   and export GeoJSON/CSV. Areas are stored in this browser's local storage.
 - Investigate provides public DNS, RDAP, IP, certificate-transparency, CVE,
-  wallet and sanctions lookups. Active scanning is disabled.
+  wallet and sanctions lookups with expandable records, source links and JSON
+  export. Select **TCP ports and service banners** to explicitly check up to 32
+  ports on a specified host. It uses TCP connections and passive banners, with
+  cancellation; it does not run exploitation or vulnerability verification.
 - Camera **Analyze frame** and **Watch 30 s** run YOLOX-nano locally through a
   single-thread browser WASM worker. This counts visible object categories;
   it does not identify people. Counts can miss objects or be wrong, and slow
@@ -49,9 +52,27 @@ remain available.
 - Forecast offers explicitly started, source-linked research with cancellation,
   progress, export, and Quick as the default depth. Only one run may be active.
   Provider credentials are kept in memory, not saved with browser preferences.
+  Paste context or load text/CSV/JSON/Markdown (up to 100,000 characters), choose
+  whether actors read it each period, inject an event into a running simulation,
+  or ask a follow-up using an entered key. Simulated-world playback maps events
+  that have coordinates; unlocated events remain in the timeline.
 - News, investigation, and forecast-option tools join the shared native tool
-  catalogue used by Tools, voice, and MCP. Tools accepts structured JSON inputs;
-  it is not a new conversational chat interface.
+  catalogue used by Tools, voice, and MCP. **Assistant** adds conversational
+  access to the query tools, globe navigation, layer toggles and workspace tabs.
+  It uses a selected provider/key, offers Stop, and limits a message to six
+  model steps. Conversation and key are cleared when leaving the tab. Tools
+  remains available for direct structured inputs.
+- Broadcasts includes all 23 channels from Osiris's frontend list, with a player
+  and external broadcaster link. Conflicts includes all 15 editorial region
+  anchors, enriched with matching source-linked headlines. Severity labels are
+  inherited classifications, not verified live frontlines. Both overlays can
+  be kept on the globe using their checkbox. Player availability depends on
+  broadcaster embedding restrictions.
+- **Nearest** selects another matching camera near the centre of the current
+  view. **Focus** returns to the currently selected camera. Camera search covers
+  the full inventory while rendering at most 250 suggestions plus the selection.
+  Terrain refinement follows the viewed area and selected camera instead of
+  preloading terrain for every camera worldwide. This limits work, not cameras.
 
 Child's Eye's expanded CCTV providers, Ontario authentication, English place
 names/WhereAmI, local AI Watch models, 20% GPU budget, notifications-only behavior,
@@ -94,8 +115,8 @@ restarts/provider failures. Initial collection shows progress; subsequent starts
 can use the saved inventory while refreshing. Cameras offers pagination and an
 **Export provider coverage** action. Coverage distinguishes unavailable, stale,
 and partial sources; a registered record does not establish working playback.
-See [INTEGRATION_AUDIT.md](INTEGRATION_AUDIT.md) for the first delivery's other
-omissions, which are not represented as finished by the camera correction.
+See [INTEGRATION_AUDIT.md](INTEGRATION_AUDIT.md) for the first delivery's omissions,
+their completed follow-up implementations, and remaining provider-dependent limits.
 
 Local research endpoints reject foreign origins and nonlocal access. API modules
 are selected from an explicit allowlist. Import directions preserve the portable
@@ -112,7 +133,7 @@ WASM asset handling, and credential changes made in this integration.
 
 Before integration, Child's Eye passed 5,553 main tests with one skip; upstream
 passed 6,242 with one skip. Both also passed their allocation checks. The combined
-suite has 6,438 main tests (6,437 passing, one skip), plus 14 allocation checks.
+suite has 6,444 main tests (6,443 passing, one skip), plus 14 passing allocation checks.
 Production build, formatting, package boundaries and layer-token compatibility
 are checked separately. A socket test now waits for the second AIS fix before
 asserting a two-point trail, avoiding a race between separate WebSocket frames.
@@ -122,6 +143,8 @@ playback, browser inference, origin rejection, and before/after views of Toronto
 Manhattan and the Alps. Screenshot evidence and run logs are kept in the ignored
 `output/ultimate-eye-2026-10-10` directory in BK's working repository. These
 screenshots use SwiftShader; their frame rates are not hardware benchmarks.
+The completion pass adds `output/completion/` for CCTV timing, full-inventory
+search and Nearest checks, assistant actions, and forecast/context/playback tests.
 
 Standalone Osiris builds and serves successfully. Its untouched upstream test
 baseline has 1,249 passing tests, two failures and 20 skips: a dated news-context

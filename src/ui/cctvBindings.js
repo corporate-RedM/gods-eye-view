@@ -40,7 +40,12 @@ export function _initCctvPanel() {
     )
       return;
     this.actions.runExplicitFocus(
-      () => this.cctv.focusNearest({ focus: false, feed: feedFilter() }),
+      () =>
+        this.cctv.focusNearest({
+          focus: false,
+          feed: feedFilter(),
+          excludeCurrent: true,
+        }),
       (cameraId) => this.cctv.focusCamera(cameraId, 1.8),
     );
   });
@@ -139,6 +144,11 @@ export function _initCctvPanel() {
 
   // Picking a search suggestion (or pressing Enter on an exact label) selects
   // that camera through the dropdown's own change path, then clears the box.
+  this.listen(this._cctvSearch, 'input', () => {
+    // A selected datalist label must remain resolvable by the change handler.
+    if (!this._cctvSearchIds?.has(this._cctvSearch.value.trim()))
+      this._renderCctvState(this._cctvState);
+  });
   this.listen(this._cctvSearch, 'change', () => {
     const cameraId = this._cctvSearchIds?.get(this._cctvSearch.value.trim());
     if (!cameraId || !this._cctvSelect) return;

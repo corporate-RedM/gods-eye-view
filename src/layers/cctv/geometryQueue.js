@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { nearbyCameras } from './nearby.js';
 import {
   GEO_PROGRESS_NOTIFY_INTERVAL_MS,
   GEO_PROGRESS_NOTIFY_BATCH_LIMIT,
@@ -303,7 +304,14 @@ export function createGeometryQueue({
     const refLon = carto
       ? Cesium.Math.toDegrees(carto.longitude)
       : (active?.camera.lon ?? 0);
-    const pending = layerState._records
+    const nearby = nearbyCameras(
+      layerState._records,
+      layerState._viewer,
+      256,
+      (record) => record.camera,
+    );
+    parts.ground.warmNearbyGround?.(active ? [active, ...nearby] : nearby);
+    const pending = nearby
       .filter((record) => record !== active)
       .map((record) => ({
         record,
