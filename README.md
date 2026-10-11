@@ -1,3 +1,56 @@
+## Child's Eye fork: camera configuration and agent notes
+
+This checkout's `childs_eye` branch combines Child's Eye, God's Eye upstream,
+and native Osiris integrations. Start it with `childs-eye` on BK's machine
+(default URL: `http://localhost:4173`). See the [integration guide](docs/ULTIMATE_EYE.md)
+and [implementation audit](docs/INTEGRATION_AUDIT.md) before changing its behavior.
+The upstream project documentation follows this section.
+
+**`CCTV_MAX_SOURCES=10000` in `.env` is not the active Child's Eye camera limit.**
+The standalone app uses full-inventory mode:
+
+- [Standalone configuration](server/standalone/vite.config.js) passes
+  `fullCatalog: true` and `extraPacks: eyeCameraPacks()` to `createCctvCatalog`.
+- [Catalogue factory](server/providers/cctv/catalog.js) returns
+  [the full catalogue implementation](server/providers/cctv/fullCatalog.js)
+  before reaching the legacy `CCTV_MAX_SOURCES` cap. Native loaders receive
+  `fullCatalog: true`, bypassing their count and district restrictions too.
+- [Osiris camera registration](server/standalone/eye-cameras.js) adds all 56
+  imported regions alongside the 19 native provider groups and file/environment
+  sources. `EYE_EXTRA_CAMERAS=0` explicitly disables the imported regions.
+  `EYE_CAMERA_PACK_CAP` and `EYE_EXTRA_CAMERA_CAP` are no longer used.
+- Reusable library callers still default to bounded mode unless they explicitly
+  request `fullCatalog: true`. Do not remove their separate compatibility path
+  or reintroduce its caps into the standalone app.
+
+The running catalogue can therefore contain roughly 79,000 records despite the
+old 10,000 setting. Counts vary as providers refresh; they include snapshots,
+video streams, embedded players and operator links, not independently verified
+online cameras or unique physical devices. Exact shared feeds are deduplicated
+with alias IDs retained. Inventories persist in `.cache/cctv-full-catalog.json`;
+failed or partial refreshes retain previously collected records.
+
+To verify the running instance, inspect
+[`/api/cctv/sources`](http://localhost:4173/api/cctv/sources): `sources.length`
+is the current count, `coverage.mode` should be `"full"`, `trimmedPacks` should
+be empty, and `coverage.packs` reports provider state. `coverage.loading: true`
+can indicate a background refresh while a saved snapshot is already available.
+Use these fields rather than an old `.env` value or a test-suite count as evidence.
+
+Performance budgets do **not** trim the inventory: the CCTV dropdown renders up
+to 250 suggestions plus the current selection while searching all records;
+terrain refinement prioritizes 256 nearby cameras and the selected camera.
+**Nearest** selects another matching feed near the viewed area's centre;
+**Focus** returns to the selected feed. Preserve these behaviors when migrating.
+
+Mapillary Street Level uses `MAPILLARY_CLIENT_TOKEN` in the ignored `.env`.
+Supply the **Client Access Token / Client Token**, not the Client Secret or
+Client ID. Never put credential values in this README or committed files.
+`/api/mapillary/status` reports whether the running server has a token configured;
+that alone does not prove the token is valid or imagery is available.
+
+---
+
 <div align="center">
 
 # 🌐 God's Eye View
@@ -300,7 +353,7 @@ Twenty layers and map sources. **Seventeen have a keyless path.** Some offer add
 | 🛰️ **Satellites**           | 838-object catalog, color-coded by class with a live legend — the **DENSE** chip drops in the whole Starlink shell                                                                                                                                                                                                                                                                  | CelesTrak                               | 🟢                                                                                                  |
 | 🌍 **Earthquakes**          | Global seismic activity, last 24h                                                                                                                                                                                                                                                                                                                                                   | USGS                                    | 🟢                                                                                                  |
 | 🚗 **Traffic**              | Simulated vehicles on OSM roads. With TomTom, live flow speeds drive the simulation and congestion colors below ~8 km; individual vehicle positions are not live observations                                                                                                                                                                                                       | TomTom + OSM                            | 🟢 simulation · 🟡 live flow speeds                                                                 |
-| 📹 **CCTV Mesh**            | ~3,900 public cameras projected _into_ the 3D space — Austin · Texas (TxDOT) · California (Caltrans) · London (TfL) · Ontario (511) · Finland (Fintraffic) · British Columbia (DriveBC) · Estonia (Tallinn, Tarktee) · Delaware (DelDOT live video) · New South Wales (Live Traffic NSW) · Calgary · Norway (Statens vegvesen). Positions are published; poses are estimated priors **you calibrate by dragging a gizmo on the camera itself** | City APIs                               | 🟢                                                                                                  |
+| 📹 **CCTV Mesh**            | Full native and Osiris camera inventories; count varies by provider availability (see the Child's Eye notes above). Supported feeds project _into_ the 3D space; embedded players and operator links are also retained. Positions are published; poses are estimated priors **you calibrate by dragging a gizmo on the camera itself** | City APIs                               | 🟢                                                                                                  |
 | 📷 **Mapped ALPR Cameras**  | License-plate-reader camera locations tagged by OpenStreetMap contributors, loaded one city-sized view at a time, with **SHOW NEAREST**. Locations and tags only: no plate data, no video                                                                                                                                                                                           | OpenStreetMap (incl. DeFlock mapping)   | 🟢                                                                                                  |
 | 📷 **Street Level**         | Street-level photos behind one panel, one chip per provider: coverage on the streets, image cones, an embedded viewer and **FOLLOW**. Mapillary first; Panoramax, KartaView and Google Street View planned                                                                                                                                                                          | Mapillary                               | 🟡 Mapillary client token                                                                           |
 | 📻 **Radio**                | Geolocated world radio with an **analog tuner** — drag the needle across up to 750 stations and the globe flies to each broadcaster                                                                                                                                                                                                                                                 | Radio Browser / broadcasters            | 🟢                                                                                                  |
