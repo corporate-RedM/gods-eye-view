@@ -385,6 +385,7 @@ export function createEyeWorkspace({
       const canvas = el('canvas');
       const footer = el('footer');
       const caption = el('div', 'Connecting…', 'eye-meta');
+      const analysisCaption = el('div', null, 'eye-meta eye-analysis');
       const title = el('strong', camera.name);
       const lease = crypto.randomUUID();
       const mediaPath = `/api/cctv/media/${encodeURIComponent(id)}?lease=${lease}`;
@@ -425,6 +426,7 @@ export function createEyeWorkspace({
           'eye-meta',
         ),
         caption,
+        analysisCaption,
         row(
           button('Locate', () => fly(camera.lon, camera.lat)),
           analyze,
@@ -504,7 +506,7 @@ export function createEyeWorkspace({
             await import('../../integrations/osiris/lib/vision/analysis.js');
           forgetSession(id);
           do {
-            caption.textContent = watchMode
+            analysisCaption.textContent = watchMode
               ? `Observing locally… ${Math.round((performance.now() - start) / 1000)} / 30 s`
               : 'Analyzing locally…';
             if (!video && !media.naturalWidth)
@@ -533,7 +535,7 @@ export function createEyeWorkspace({
                 Math.max(14, d.box[1] - 5),
               );
             }
-            caption.textContent = `${describeFrame(a)} · ${a.ms} ms inference · counts may miss objects`;
+            analysisCaption.textContent = `${describeFrame(a)} · ${a.ms} ms inference · counts may miss objects`;
             if (!watchMode) break;
             await new Promise((resolve) => setTimeout(resolve, 2500));
           } while (
@@ -543,7 +545,7 @@ export function createEyeWorkspace({
             performance.now() - start < 30000
           );
           if (watchMode && samples.length && !disposed && !stopped)
-            caption.textContent = describeWatch(
+            analysisCaption.textContent = describeWatch(
               summariseWatch(
                 samples,
                 Math.round((performance.now() - start) / 1000),
@@ -551,7 +553,7 @@ export function createEyeWorkspace({
             );
           forgetSession(id);
         } catch (e) {
-          if (!disposed) caption.textContent = e.message;
+          if (!disposed) analysisCaption.textContent = e.message;
         } finally {
           analysing = false;
           watching = false;

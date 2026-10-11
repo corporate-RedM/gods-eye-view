@@ -49,7 +49,7 @@ try {
   const card=document.querySelector('[data-qa-watch]');
   return ![...card.querySelectorAll('button')].find(b=>b.textContent==='Watch 30 s').disabled;
  },{timeout:90000});
- const watchSummary=await page.$eval('[data-qa-watch] .eye-meta',el=>el.textContent);
+ const watchSummary=await page.$eval('[data-qa-watch] .eye-analysis',el=>el.textContent);
  assert.match(watchSummary,/Observed|seconds|frames|over \d+s/i);
  console.log('WATCH',watched,watchSummary);
  const dns = await page.evaluate(async()=>({status:(await fetch('/api/eye/osint/dns?domain=example.com')).status}));
