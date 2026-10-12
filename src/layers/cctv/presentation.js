@@ -157,6 +157,9 @@ export function createPresentation({
       autoHopSuspended: layerState._autoHopSuspended,
       autoHopSec: layerState._autoHopSec,
       count: layerState._count,
+      catalogueLoading: layerState._catalogueLoading
+        ? { ...layerState._catalogueLoading }
+        : null,
       lastUpdate: layerState._lastUpdate,
       error: layerState._lastError,
       loading: {
@@ -179,9 +182,11 @@ export function createPresentation({
       },
       activeCameraId: activeId,
       activeCamera: active ? getPublicCameraState(active, activeId) : null,
-      cameras: layerState._records.map((record) =>
-        getPublicCameraState(record, activeId),
-      ),
+      cameras: layerState._catalogueLoading?.active
+        ? []
+        : layerState._records.map((record) =>
+            getPublicCameraState(record, activeId),
+          ),
       summary: buildSummaryText(),
     };
     return payload;

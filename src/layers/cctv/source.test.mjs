@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCctvSource, createCctvLayer } from './index.js';
+import { createLifecycle } from './lifecycle.js';
 
 const camera = {
   id: 'pack/camera ?x',
@@ -12,6 +13,101 @@ const camera = {
   fovDeg: 60,
   pitchDeg: -12,
 };
+
+test('catalogue collection publishes actual discovered counts before returning the complete snapshot', async () => {
+  let calls = 0;
+  const progress = [];
+  const source = createCctvSource({
+    fetchImpl: async () =>
+      Response.json(
+        ++calls === 1
+          ? {
+              sources: [camera],
+              coverage: { loading: true, snapshotReady: false },
+            }
+          : {
+              sources: [camera, { ...camera, id: 'second' }],
+              coverage: { loading: false, snapshotReady: true },
+            },
+      ),
+  });
+  const result = await source.getCatalog({
+    onProgress: (value) => progress.push(value),
+  });
+  assert.deepEqual(progress, [
+    { discovered: 1, collecting: true },
+    { discovered: 2, collecting: false },
+  ]);
+  assert.equal(result.sources.length, 2);
+});
+
+test('a warm saved catalogue publishes its real count immediately during a server refresh', async () => {
+  const progress = [];
+  const source = createCctvSource({
+    fetchImpl: async () =>
+      Response.json({
+        sources: [camera],
+        coverage: { loading: true, snapshotReady: true },
+      }),
+  });
+  await source.getCatalog({ onProgress: (value) => progress.push(value) });
+  assert.deepEqual(progress, [{ discovered: 1, collecting: false }]);
+});
+
+test('registration publishes actual record/map counts and cancellation stops the next batch', async () => {
+  const noop = () => {};
+  const empty = new Proxy({}, { get: () => noop });
+  const state = {};
+  const snapshots = [];
+  const cameras = Array.from({ length: 5000 }, (_, i) => ({
+    ...camera,
+    id: `camera-${i}`,
+    mountHeightM: 20,
+  }));
+  const lifecycle = createLifecycle({
+    state,
+    services: {
+      sprites: empty,
+      activation: empty,
+      picking: empty,
+      focus: empty,
+      render: empty,
+    },
+    parts: {
+      geometryQueue: empty,
+      cards: empty,
+      projection: empty,
+      calibration: { loadCalibrationStore: () => new Map() },
+      catalog: {
+        loadCameraSources: async () => cameras,
+        buildCatalogFromSources: (value) => value,
+      },
+      model: empty,
+      ground: { resolveGroundPriors: async () => null },
+      presentation: {
+        notifyListeners() {
+          const progress = state._catalogueLoading;
+          if (progress?.phase !== 'registering') return;
+          snapshots.push({ ...progress });
+          assert.equal(progress.loaded, state._records.length);
+          assert.equal(progress.loaded, state._recordById.size);
+          if (progress.loaded > 0) state._sourceAbort.abort();
+        },
+      },
+    },
+    source: {},
+  });
+  await assert.rejects(
+    lifecycle.methods.init({ scene: { primitives: { add: noop } } }),
+    { name: 'AbortError' },
+  );
+  assert.equal(snapshots[0].loaded, 0);
+  assert.equal(snapshots[1].total, cameras.length);
+  assert.ok(snapshots[1].loaded > 0 && snapshots[1].loaded < cameras.length);
+  assert.equal(state._records.length, snapshots[1].loaded);
+  assert.equal(state._catalogueLoading.phase, 'cancelled');
+  assert.equal(state._catalogueLoading.active, false);
+});
 
 test('camera catalog and health use fixed source routes and caller cancellation', async () => {
   const calls = [];

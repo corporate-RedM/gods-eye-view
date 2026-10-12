@@ -86,10 +86,10 @@ export function createCatalog({ state: layerState, services, parts, source }) {
    * @returns {Promise<Object[]>} Array of raw source objects, or empty on failure.
    */
 
-  async function loadCameraSources() {
+  async function loadCameraSources(onProgress) {
     try {
       const signal = layerState._sourceAbort?.signal;
-      const data = await source.getCatalog({ signal });
+      const data = await source.getCatalog({ signal, onProgress });
       signal?.throwIfAborted();
       if (!Array.isArray(data?.sources)) return [];
       return data.sources;

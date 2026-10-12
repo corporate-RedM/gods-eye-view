@@ -369,47 +369,45 @@ export function _updateCctvSyncChip(loading, enabled) {
   if (this.destroyed) return;
   if (!this._cctvSyncChip || !this._cctvSyncLabel || !this._cctvSyncProgress)
     return;
-  const total = Number(loading?.total) || 0;
-  const loaded = Math.max(0, Math.min(Number(loading?.loaded) || 0, total));
-  const busy = !!enabled && !!loading?.active && total > 0;
-  const catalogueCount =
-    Number(this._cctvState?.count) || this._cctvState?.cameras?.length || 0;
-  const catalogueText = `${catalogueCount.toLocaleString()} camera records loaded`;
+  const catalogue = this._cctvState?.catalogueLoading;
+  const busy = !!catalogue?.active;
+  const count = Number(this._cctvState?.count) || 0;
+  const total = catalogue?.total ?? count;
+  const loaded = catalogue?.loaded ?? count;
+  const format = (value) => Number(value || 0).toLocaleString('en-US');
   this._cctvSyncChip.title =
-    'Nearby progress refines terrain placement, not video frames. The loaded catalogue remains searchable; feeds open on demand.';
-
-  if (busy) {
-    clearTimeout(this._cctvChipHideTimer);
-    this._cctvChipHideTimer = null;
-    this._cctvChipWasBusy = true;
-    this.actions.setSplitFlapText(
-      this._cctvSyncLabel,
-      'positioning nearby cameras',
+    'Full camera catalogue registered in this browser. Nearby terrain is a separate positioning budget; video feeds open on demand.';
+  // init runs before the layer becomes enabled: its real progress must be visible too.
+  this._cctvSyncChip.classList.toggle('visible', busy || enabled);
+  const failed =
+    catalogue?.phase === 'error' || catalogue?.phase === 'cancelled';
+  this.actions.setSplitFlapText(
+    this._cctvSyncLabel,
+    busy
+      ? catalogue.total == null
+        ? 'collecting camera catalogue'
+        : 'loading camera catalogue'
+      : failed
+        ? 'camera catalogue incomplete'
+        : 'camera catalogue loaded',
+  );
+  this._cctvSyncProgress.textContent =
+    busy && catalogue.total == null
+      ? `${format(catalogue.discovered)} camera records found`
+      : `${format(loaded)} / ${format(total)} cameras`;
+  if (this._cctvSyncDetail) {
+    const nearbyTotal = Number(loading?.total) || 0;
+    const nearbyDone = Math.max(
+      0,
+      Math.min(Number(loading?.loaded) || 0, nearbyTotal),
     );
-    // The counter is left plain on purpose: it ticks every few frames
-    // during a grid load, and flapping it would read as a slot machine.
-    this._cctvSyncProgress.textContent = `${loaded}/${total} · ${catalogueText}`;
-    this._cctvSyncChip.classList.add('visible');
-    return;
-  }
-
-  if (this._cctvChipWasBusy && enabled && total > 0) {
-    // Load just completed — flash the final count, then auto-hide.
-    this._cctvChipWasBusy = false;
-    this.actions.setSplitFlapText(this._cctvSyncLabel, 'nearby cameras ready');
-    this._cctvSyncProgress.textContent = `${total}/${total} · ${catalogueText}`;
-    this._cctvSyncChip.classList.add('visible');
-    clearTimeout(this._cctvChipHideTimer);
-    this._cctvChipHideTimer = window.setTimeout(() => {
-      if (this.destroyed) return;
-      this._cctvChipHideTimer = null;
-      this._cctvSyncChip.classList.remove('visible');
-    }, 1500);
-    return;
-  }
-
-  if (!this._cctvChipHideTimer) {
-    this._cctvChipWasBusy = false;
-    this._cctvSyncChip.classList.remove('visible');
+    const preparing = catalogue?.phase === 'preparing';
+    this._cctvSyncDetail.textContent = busy
+      ? preparing
+        ? 'Preparing camera locations'
+        : ''
+      : enabled && nearbyTotal > 0
+        ? `Nearby terrain: ${format(nearbyDone)} / ${format(nearbyTotal)}${loading?.active ? '' : ' · ready'}`
+        : '';
   }
 }

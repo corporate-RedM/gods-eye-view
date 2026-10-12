@@ -33,6 +33,7 @@ export function createLifecycle({
     layerState._recordById = new Map();
     layerState._healthById = new Map();
     layerState._count = 0;
+    layerState._catalogueLoading = null;
     layerState._lastUpdate = null;
     layerState._lastHealthSyncAt = 0;
     layerState._lastError = null;
@@ -56,280 +57,350 @@ export function createLifecycle({
       layerState._sourceAbort?.abort();
       const sourceAbort = new AbortController();
       layerState._sourceAbort = sourceAbort;
-      if (typeof document !== 'undefined')
-        document.addEventListener(
-          'visibilitychange',
-          parts.cards.handleVisibilityChange,
+      try {
+        if (typeof document !== 'undefined')
+          document.addEventListener(
+            'visibilitychange',
+            parts.cards.handleVisibilityChange,
+          );
+        layerState._viewer = viewer;
+        clearRuntimeState();
+        layerState._enabled = false;
+        layerState._activeCameraId = null;
+        layerState._autoHopSuspended = false;
+        layerState._lastHopAt = 0;
+        layerState._lastViewContext = '';
+        layerState._calibrationById = parts.calibration.loadCalibrationStore();
+
+        const reportProgress = (phase, loaded, total, discovered = total) => {
+          sourceAbort.signal.throwIfAborted();
+          layerState._catalogueLoading = {
+            active: true,
+            phase,
+            loaded,
+            total,
+            discovered,
+          };
+          parts.presentation.notifyListeners();
+        };
+        reportProgress('fetching', 0, null, 0);
+
+        layerState._billboards = new Cesium.BillboardCollection();
+        // Keep partially registered billboards out of rendering until culling is ready.
+        layerState._billboards.show = false;
+        layerState._viewer.scene.primitives.add(layerState._billboards);
+        registerSpriteCollection('cctv', layerState._billboards);
+
+        const sources = await parts.catalog.loadCameraSources(
+          ({ discovered, collecting }) => {
+            reportProgress(
+              collecting ? 'collecting' : 'preparing',
+              0,
+              collecting ? null : discovered,
+              discovered,
+            );
+          },
         );
-      layerState._viewer = viewer;
-      clearRuntimeState();
-      layerState._enabled = false;
-      layerState._activeCameraId = null;
-      layerState._autoHopSuspended = false;
-      layerState._lastHopAt = 0;
-      layerState._lastViewContext = '';
-      layerState._calibrationById = parts.calibration.loadCalibrationStore();
+        sourceAbort.signal.throwIfAborted();
+        const catalogFromSources =
+          parts.catalog.buildCatalogFromSources(sources);
+        const catalog = catalogFromSources.length
+          ? catalogFromSources
+          : parts.catalog.seedCatalog();
+        reportProgress('preparing', 0, catalog.length);
 
-      layerState._billboards = new Cesium.BillboardCollection();
-      layerState._viewer.scene.primitives.add(layerState._billboards);
-      registerSpriteCollection('cctv', layerState._billboards);
+        // Viewshed color identity (design §3a): golden-angle hue over the
+        // id-SORTED catalog index — deterministic across sessions for a stable
+        // catalog, maximally separated for neighboring cameras.
+        const hueIndexById = new Map(
+          catalog
+            .map((camera) => camera.id)
+            .sort()
+            .map((id, index) => [id, index]),
+        );
 
-      const sources = await parts.catalog.loadCameraSources();
-      const catalogFromSources = parts.catalog.buildCatalogFromSources(sources);
-      const catalog = catalogFromSources.length
-        ? catalogFromSources
-        : parts.catalog.seedCatalog();
-
-      // Viewshed color identity (design §3a): golden-angle hue over the
-      // id-SORTED catalog index — deterministic across sessions for a stable
-      // catalog, maximally separated for neighboring cameras.
-      const hueIndexById = new Map(
-        catalog
-          .map((camera) => camera.id)
-          .sort()
-          .map((id, index) => [id, index]),
-      );
-
-      for (const camera of catalog) {
-        const savedEntry = layerState._calibrationById.get(camera.id);
-        if (savedEntry) {
-          // Entries saved before the range floor dropped (no rangeFloorM)
-          // keep their effective range by re-basing rangeScale once.
-          const values =
-            savedEntry.rangeFloorM === CALIBRATION_RANGE_FLOOR_M
-              ? savedEntry.values
-              : parts.calibration.migrateRangeScaleForFloor(
-                  savedEntry.values,
-                  camera.rangeM,
-                );
-          savedEntry.values = values;
-          savedEntry.rangeFloorM = CALIBRATION_RANGE_FLOOR_M;
-          camera.calibration = parts.calibration.normalizeCalibration(values);
-          camera.calSource = savedEntry.source;
+        for (const camera of catalog) {
+          const savedEntry = layerState._calibrationById.get(camera.id);
+          if (savedEntry) {
+            // Entries saved before the range floor dropped (no rangeFloorM)
+            // keep their effective range by re-basing rangeScale once.
+            const values =
+              savedEntry.rangeFloorM === CALIBRATION_RANGE_FLOOR_M
+                ? savedEntry.values
+                : parts.calibration.migrateRangeScaleForFloor(
+                    savedEntry.values,
+                    camera.rangeM,
+                  );
+            savedEntry.values = values;
+            savedEntry.rangeFloorM = CALIBRATION_RANGE_FLOOR_M;
+            camera.calibration = parts.calibration.normalizeCalibration(values);
+            camera.calSource = savedEntry.source;
+          }
+          parts.model.ensureCameraPose(camera);
         }
-        parts.model.ensureCameraPose(camera);
-      }
 
-      // Task 5 (height-datum fix): batch ALL camera coords through the Re:Earth
-      // ellipsoidal ground-prior resolver (network-cached — NOT a scene query;
-      // the catalog's orthometric groundElevationM feeds the geoid fallback
-      // chain). Bounded wait: a warm proxy cache resolves in milliseconds, so
-      // records are normally built WITH their prior (correct first paint in
-      // every regime); a cold/slow upstream loses the race and the batch
-      // applies post-hoc via applyLateGroundPriors instead of hanging init.
-      const priorsPromise = parts.ground.resolveGroundPriors(catalog);
-      const priors = await Promise.race([
-        priorsPromise,
-        new Promise((resolve) =>
-          setTimeout(() => resolve(null), GROUND_PRIOR_INIT_WAIT_MS),
-        ),
-      ]);
-      sourceAbort.signal.throwIfAborted();
-
-      for (let i = 0; i < catalog.length; i++) {
-        const camera = catalog[i];
-        // Ellipsoidal ground prior (or null while the batch is still in
-        // flight). Geometry falls back to the catalog value only until the
-        // batch lands.
-        const groundPrior = priors?.[i] || null;
-        // Cheap first-pass altitude from the ellipsoidal prior (catalog value
-        // only as the pre-prior fallback) — the staggered geometry queue
-        // refines with sampled tile heights after enable so the init path
-        // never raycasts the scene once per camera.
-        const priorGround = Number.isFinite(groundPrior?.ellipsoid)
-          ? groundPrior.ellipsoid
-          : Number(camera.groundElevationM) || 0;
-        camera.absoluteHeightM = priorGround + camera.mountHeightM;
-        const position = Cesium.Cartesian3.fromDegrees(
-          camera.lon,
-          camera.lat,
-          camera.absoluteHeightM,
-        );
-        const billboard = layerState._billboards.add({
-          id: camera.id,
-          image: CAMERA_ICON,
-          position,
-          color: IDLE_CAMERA_COLOR,
-          width: 24,
-          height: 24,
-          // Field-test fix (2026-07-06): always-on-top. The old finite value
-          // (1800 m) re-engaged the depth test at far zoom, where the COARSE
-          // far-LOD Google-3D mesh sits above the true ground and swallowed
-          // ground-anchored icons ("submerged" pills over SF). Far-side-of-globe
-          // icons are handled by refreshHorizonCulling() (the flights-layer
-          // EllipsoidalOccluder pattern), not by the depth test.
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          scaleByDistance: new Cesium.NearFarScalar(350, 1.25, 4_000_000, 0.42),
-        });
-
-        const record = {
-          camera,
-          position,
-          billboard,
-          coverageEntities: [],
-          projection: null,
-          // Task 5 (height-datum fix): regime-aware ground resolution state.
-          //   groundPrior     — { ellipsoid, source } from the Re:Earth batch
-          //     (null until a late batch lands). The prior applies in EVERY
-          //     regime and is the terrain-globe resolution outright.
-          //   groundResolved  — PER-REGIME one-shot latch (regime key →
-          //     boolean): true once this record's resolution completed for that
-          //     regime; such records are excluded from the completion pass so
-          //     their geometry freezes. Re-armed only on a genuine pose change,
-          //     explicit user select/move, or a surface-regime change — never
-          //     on the 10s timer.
-          //   groundSamples   — PER-REGIME resolved ground (regime key →
-          //     metres): the accepted one-shot scene sample in google-3d, the
-          //     mirrored prior in terrain-globe. Kept across re-arms as the
-          //     "has ever resolved" memory for the B9c mid-stream guard.
-          //   frustumPositions — cached Cartesians for pure recomputes (so
-          //     plane placement never re-derives geometry it already has).
-          groundPrior,
-          groundResolved: {},
-          groundSamples: {},
-          frustumGeometry: null,
-          frustumPositions: null,
-          // §9.1 activation obstruction probe result: effective-range clamp so
-          // the far-cap plane never clips into the tiles. Null = unclamped.
-          // Reset + re-probed on every activation; cleared when the user takes
-          // the range slider (slider overrides the clamp).
-          probeClampRangeM: null,
-          // Viewshed (design §3a/§3b): per-camera color identity + the volume
-          // primitive handle (exists only in viewshed mode for the visible set).
-          viewshedColors: viewshedColors(
-            cameraHue(hueIndexById.get(camera.id) ?? 0),
+        // Task 5 (height-datum fix): batch ALL camera coords through the Re:Earth
+        // ellipsoidal ground-prior resolver (network-cached — NOT a scene query;
+        // the catalog's orthometric groundElevationM feeds the geoid fallback
+        // chain). Bounded wait: a warm proxy cache resolves in milliseconds, so
+        // records are normally built WITH their prior (correct first paint in
+        // every regime); a cold/slow upstream loses the race and the batch
+        // applies post-hoc via applyLateGroundPriors instead of hanging init.
+        const priorsPromise = parts.ground.resolveGroundPriors(catalog);
+        const priors = await Promise.race([
+          priorsPromise,
+          new Promise((resolve) =>
+            setTimeout(() => resolve(null), GROUND_PRIOR_INIT_WAIT_MS),
           ),
-          viewshedPrimitive: null,
-          viewshedActiveTint: false,
-        };
-        layerState._records.push(record);
-        layerState._recordById.set(camera.id, record);
-      }
+        ]);
+        sourceAbort.signal.throwIfAborted();
+        reportProgress('registering', 0, catalog.length);
 
-      layerState._count = layerState._records.length;
-      if (layerState._records.length > 0) {
-        // Projection runtime + first frame fetch are deferred to enable() so
-        // initializing the catalog stays render-cheap.
-        layerState._activeCameraId = parts.navigation.defaultCameraId();
-      }
+        for (let i = 0; i < catalog.length; i++) {
+          const camera = catalog[i];
+          // Ellipsoidal ground prior (or null while the batch is still in
+          // flight). Geometry falls back to the catalog value only until the
+          // batch lands.
+          const groundPrior = priors?.[i] || null;
+          // Cheap first-pass altitude from the ellipsoidal prior (catalog value
+          // only as the pre-prior fallback) — the staggered geometry queue
+          // refines with sampled tile heights after enable so the init path
+          // never raycasts the scene once per camera.
+          const priorGround = Number.isFinite(groundPrior?.ellipsoid)
+            ? groundPrior.ellipsoid
+            : Number(camera.groundElevationM) || 0;
+          camera.absoluteHeightM = priorGround + camera.mountHeightM;
+          const position = Cesium.Cartesian3.fromDegrees(
+            camera.lon,
+            camera.lat,
+            camera.absoluteHeightM,
+          );
+          const billboard = layerState._billboards.add({
+            id: camera.id,
+            image: CAMERA_ICON,
+            position,
+            color: IDLE_CAMERA_COLOR,
+            width: 24,
+            height: 24,
+            // Field-test fix (2026-07-06): always-on-top. The old finite value
+            // (1800 m) re-engaged the depth test at far zoom, where the COARSE
+            // far-LOD Google-3D mesh sits above the true ground and swallowed
+            // ground-anchored icons ("submerged" pills over SF). Far-side-of-globe
+            // icons are handled by refreshHorizonCulling() (the flights-layer
+            // EllipsoidalOccluder pattern), not by the depth test.
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(
+              350,
+              1.25,
+              4_000_000,
+              0.42,
+            ),
+          });
 
-      // Task 5: if the prior batch lost init's bounded race, apply it post-hoc
-      // when it lands (pure recomputes — applyLateGroundPriors guards against
-      // a torn-down/re-inited catalog).
-      if (!priors) {
-        const initRecords = layerState._records.slice();
-        priorsPromise
-          .then((late) => {
-            if (late) parts.ground.applyLateGroundPriors(initRecords, late);
-          })
-          .catch(() => {});
-      }
-
-      // Task 5: track the surface regime the initial geometry was computed for
-      // and listen for map-stack changes (main.js re-dispatches
-      // MapStackController.onChange as this CustomEvent). The handler compares
-      // regimes itself, so 'switching'/'error' emissions and same-regime stack
-      // swaps (bing→osm) no-op.
-      layerState._lastAppliedRegime = parts.ground.currentSurfaceRegime();
-      if (!layerState._mapStackListener && typeof window !== 'undefined') {
-        layerState._mapStackListener = () =>
-          parts.ground.handleMapStackChanged();
-        window.addEventListener(
-          'gev:map-stack-changed',
-          layerState._mapStackListener,
-        );
-      }
-
-      // Field-test fix (2026-07-06): horizon-cull on camera settle (pairs with
-      // the billboards' always-on-top depth setting) + one initial pass so the
-      // first paint is already culled.
-      if (!layerState._horizonCullListener) {
-        // Ambient cards piggyback the same settle event: moveEnd-driven
-        // reselection only, never per frame (refreshAmbientCards no-ops while
-        // the layer is disabled).
-        layerState._horizonCullListener = () => {
-          layerState._cameraMoving = false;
-          parts.rendering.refreshHorizonCulling();
-          parts.cards.refreshAmbientCards();
-          if (layerState._enabled) parts.geometryQueue.startGeometryLoadQueue();
-        };
-        layerState._viewer.camera.moveEnd.addEventListener(
-          layerState._horizonCullListener,
-        );
-      }
-      if (!layerState._moveStartListener) {
-        // Item B: hover picking pauses while the camera is in motion.
-        layerState._moveStartListener = () => {
-          layerState._cameraMoving = true;
-        };
-        layerState._viewer.camera.moveStart.addEventListener(
-          layerState._moveStartListener,
-        );
-      }
-      parts.rendering.refreshHorizonCulling();
-
-      layerState._clickHandler = new Cesium.ScreenSpaceEventHandler(
-        layerState._viewer.scene.canvas,
-      );
-      parts.selection.bindCctvWorldClickGesture(
-        layerState._clickHandler,
-        (click) => {
-          if (!layerState._enabled) return;
-          const picked = layerState._viewer.scene.pick(click.position);
-          const cameraId = parts.selection.extractPickedCameraId(picked);
-          if (cameraId) {
-            activateCctvCameraFromWorldClick(
-              cameraId,
-              parts.selection.setActiveCamera,
-            );
-            return;
+          const record = {
+            camera,
+            position,
+            billboard,
+            coverageEntities: [],
+            projection: null,
+            // Task 5 (height-datum fix): regime-aware ground resolution state.
+            //   groundPrior     — { ellipsoid, source } from the Re:Earth batch
+            //     (null until a late batch lands). The prior applies in EVERY
+            //     regime and is the terrain-globe resolution outright.
+            //   groundResolved  — PER-REGIME one-shot latch (regime key →
+            //     boolean): true once this record's resolution completed for that
+            //     regime; such records are excluded from the completion pass so
+            //     their geometry freezes. Re-armed only on a genuine pose change,
+            //     explicit user select/move, or a surface-regime change — never
+            //     on the 10s timer.
+            //   groundSamples   — PER-REGIME resolved ground (regime key →
+            //     metres): the accepted one-shot scene sample in google-3d, the
+            //     mirrored prior in terrain-globe. Kept across re-arms as the
+            //     "has ever resolved" memory for the B9c mid-stream guard.
+            //   frustumPositions — cached Cartesians for pure recomputes (so
+            //     plane placement never re-derives geometry it already has).
+            groundPrior,
+            groundResolved: {},
+            groundSamples: {},
+            frustumGeometry: null,
+            frustumPositions: null,
+            // §9.1 activation obstruction probe result: effective-range clamp so
+            // the far-cap plane never clips into the tiles. Null = unclamped.
+            // Reset + re-probed on every activation; cleared when the user takes
+            // the range slider (slider overrides the clamp).
+            probeClampRangeM: null,
+            // Viewshed (design §3a/§3b): per-camera color identity + the volume
+            // primitive handle (exists only in viewshed mode for the visible set).
+            viewshedColors: viewshedColors(
+              cameraHue(hueIndexById.get(camera.id) ?? 0),
+            ),
+            viewshedPrimitive: null,
+            viewshedActiveTint: false,
+          };
+          layerState._records.push(record);
+          layerState._recordById.set(camera.id, record);
+          if ((i + 1) % 2048 === 0 || i + 1 === catalog.length) {
+            layerState._count = layerState._records.length;
+            reportProgress('registering', layerState._count, catalog.length);
+            // Yield after real work so the UI can paint progress and accept input.
+            // Publishing partial camera arrays here would make loading quadratic.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            sourceAbort.signal.throwIfAborted();
           }
-          // Any identified scene object owns this click even if its layer does not
-          // register a shared pick predicate. This keeps selectable siblings ahead
-          // of an overlapping CCTV card while ID-less globe/terrain/tile surfaces
-          // remain eligible for true empty-space deselection.
-          const pickedId = resolvePickId(picked);
-          if (pickedId !== null) return;
-          // Item A (owner round 2): the scene pick found no camera — try the
-          // painted ambient cards. The cards canvas is pointer-events:none (this
-          // handler owns the events), so a click landing on a card's rect selects
-          // its camera exactly like a click on the icon. Cesium click positions
-          // and the recorded rects are both CSS px — direct comparison.
-          const cardId = layerState._cctvOverlayHost.hitTest(
-            click.position.x,
-            click.position.y,
-            { sourceId: CCTV_OVERLAY_SOURCE_ID },
-          )?.entryId;
-          if (cardId && layerState._recordById.has(cardId)) {
-            activateCctvCameraFromWorldClick(
-              cardId,
-              parts.selection.setActiveCamera,
-            );
-            return;
-          }
-          if (
-            parts.selection.cctvEmptyClickDeselects(picked, {
-              activeCameraId: layerState._activeCameraId,
-              calibrationMode: layerState._calibrationMode,
+        }
+
+        layerState._count = layerState._records.length;
+        if (layerState._records.length > 0) {
+          // Projection runtime + first frame fetch are deferred to enable() so
+          // initializing the catalog stays render-cheap.
+          layerState._activeCameraId = parts.navigation.defaultCameraId();
+        }
+
+        // Task 5: if the prior batch lost init's bounded race, apply it post-hoc
+        // when it lands (pure recomputes — applyLateGroundPriors guards against
+        // a torn-down/re-inited catalog).
+        if (!priors) {
+          const initRecords = layerState._records.slice();
+          priorsPromise
+            .then((late) => {
+              if (late) parts.ground.applyLateGroundPriors(initRecords, late);
             })
-          ) {
-            parts.selection.deactivateActiveCamera();
-          }
-        },
-        {
-          // Item B: hover summons a card on a cardless camera icon. The gesture
-          // classifier owns MOUSE_MOVE too, so chain hover work through its seam
-          // instead of replacing the travel accumulator's handler.
-          onMouseMove: (movement) =>
-            parts.hover.handleHoverMove(movement?.endPosition),
-        },
-      );
+            .catch(() => {});
+        }
 
-      await parts.health.syncHealthState(true);
-      parts.rendering.refreshCoverageStyles();
-      parts.presentation.notifyListeners();
-      restoreSpriteOrder(layerState._viewer);
-      console.log('[Data:CCTV] Initialized with', layerState._count, 'cameras');
+        // Task 5: track the surface regime the initial geometry was computed for
+        // and listen for map-stack changes (main.js re-dispatches
+        // MapStackController.onChange as this CustomEvent). The handler compares
+        // regimes itself, so 'switching'/'error' emissions and same-regime stack
+        // swaps (bing→osm) no-op.
+        layerState._lastAppliedRegime = parts.ground.currentSurfaceRegime();
+        if (!layerState._mapStackListener && typeof window !== 'undefined') {
+          layerState._mapStackListener = () =>
+            parts.ground.handleMapStackChanged();
+          window.addEventListener(
+            'gev:map-stack-changed',
+            layerState._mapStackListener,
+          );
+        }
+
+        // Field-test fix (2026-07-06): horizon-cull on camera settle (pairs with
+        // the billboards' always-on-top depth setting) + one initial pass so the
+        // first paint is already culled.
+        if (!layerState._horizonCullListener) {
+          // Ambient cards piggyback the same settle event: moveEnd-driven
+          // reselection only, never per frame (refreshAmbientCards no-ops while
+          // the layer is disabled).
+          layerState._horizonCullListener = () => {
+            layerState._cameraMoving = false;
+            parts.rendering.refreshHorizonCulling();
+            parts.cards.refreshAmbientCards();
+            if (layerState._enabled)
+              parts.geometryQueue.startGeometryLoadQueue();
+          };
+          layerState._viewer.camera.moveEnd.addEventListener(
+            layerState._horizonCullListener,
+          );
+        }
+        if (!layerState._moveStartListener) {
+          // Item B: hover picking pauses while the camera is in motion.
+          layerState._moveStartListener = () => {
+            layerState._cameraMoving = true;
+          };
+          layerState._viewer.camera.moveStart.addEventListener(
+            layerState._moveStartListener,
+          );
+        }
+        parts.rendering.refreshHorizonCulling();
+
+        layerState._clickHandler = new Cesium.ScreenSpaceEventHandler(
+          layerState._viewer.scene.canvas,
+        );
+        parts.selection.bindCctvWorldClickGesture(
+          layerState._clickHandler,
+          (click) => {
+            if (!layerState._enabled) return;
+            const picked = layerState._viewer.scene.pick(click.position);
+            const cameraId = parts.selection.extractPickedCameraId(picked);
+            if (cameraId) {
+              activateCctvCameraFromWorldClick(
+                cameraId,
+                parts.selection.setActiveCamera,
+              );
+              return;
+            }
+            // Any identified scene object owns this click even if its layer does not
+            // register a shared pick predicate. This keeps selectable siblings ahead
+            // of an overlapping CCTV card while ID-less globe/terrain/tile surfaces
+            // remain eligible for true empty-space deselection.
+            const pickedId = resolvePickId(picked);
+            if (pickedId !== null) return;
+            // Item A (owner round 2): the scene pick found no camera — try the
+            // painted ambient cards. The cards canvas is pointer-events:none (this
+            // handler owns the events), so a click landing on a card's rect selects
+            // its camera exactly like a click on the icon. Cesium click positions
+            // and the recorded rects are both CSS px — direct comparison.
+            const cardId = layerState._cctvOverlayHost.hitTest(
+              click.position.x,
+              click.position.y,
+              { sourceId: CCTV_OVERLAY_SOURCE_ID },
+            )?.entryId;
+            if (cardId && layerState._recordById.has(cardId)) {
+              activateCctvCameraFromWorldClick(
+                cardId,
+                parts.selection.setActiveCamera,
+              );
+              return;
+            }
+            if (
+              parts.selection.cctvEmptyClickDeselects(picked, {
+                activeCameraId: layerState._activeCameraId,
+                calibrationMode: layerState._calibrationMode,
+              })
+            ) {
+              parts.selection.deactivateActiveCamera();
+            }
+          },
+          {
+            // Item B: hover summons a card on a cardless camera icon. The gesture
+            // classifier owns MOUSE_MOVE too, so chain hover work through its seam
+            // instead of replacing the travel accumulator's handler.
+            onMouseMove: (movement) =>
+              parts.hover.handleHoverMove(movement?.endPosition),
+          },
+        );
+
+        await parts.health.syncHealthState(true);
+        sourceAbort.signal.throwIfAborted();
+        parts.rendering.refreshCoverageStyles();
+        layerState._billboards.show = true;
+        layerState._catalogueLoading = {
+          active: false,
+          phase: 'ready',
+          loaded: layerState._count,
+          total: layerState._count,
+          discovered: catalog.length,
+        };
+        parts.presentation.notifyListeners();
+        restoreSpriteOrder(layerState._viewer);
+        console.log(
+          '[Data:CCTV] Initialized with',
+          layerState._count,
+          'cameras',
+        );
+      } catch (error) {
+        if (
+          layerState._sourceAbort === sourceAbort &&
+          layerState._catalogueLoading?.active
+        ) {
+          layerState._catalogueLoading = {
+            ...layerState._catalogueLoading,
+            active: false,
+            phase: sourceAbort.signal.aborted ? 'cancelled' : 'error',
+          };
+          parts.presentation.notifyListeners();
+        }
+        throw error;
+      }
     },
 
     /**

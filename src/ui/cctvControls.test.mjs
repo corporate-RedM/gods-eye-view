@@ -27,6 +27,109 @@ function element() {
     },
   };
 }
+
+test('catalogue progress is visible during init and retains the full total after nearby terrain finishes', (t) => {
+  const chip = element(),
+    label = {},
+    progress = {},
+    detail = {};
+  const controls = new CctvControls({
+    elements: {
+      _cctvSyncChip: chip,
+      _cctvSyncLabel: label,
+      _cctvSyncProgress: progress,
+      _cctvSyncDetail: detail,
+    },
+    cctv: {},
+    actions: {
+      isEnabled: () => true,
+      setSplitFlapText: (el, text) => {
+        el.textContent = text;
+      },
+    },
+  });
+  t.after(() => controls.destroy());
+  controls._renderCctvState({
+    enabled: false,
+    count: 2048,
+    catalogueLoading: {
+      active: true,
+      phase: 'registering',
+      loaded: 2048,
+      total: 78920,
+    },
+  });
+  assert.equal(chip.classList.contains('visible'), true);
+  assert.equal(label.textContent, 'loading camera catalogue');
+  assert.equal(progress.textContent, '2,048 / 78,920 cameras');
+  const ready = {
+    enabled: true,
+    count: 78920,
+    catalogueLoading: {
+      active: false,
+      phase: 'ready',
+      loaded: 78920,
+      total: 78920,
+    },
+    loading: { active: true, loaded: 160, total: 256 },
+  };
+  controls._renderCctvState(ready);
+  assert.equal(progress.textContent, '78,920 / 78,920 cameras');
+  assert.equal(detail.textContent, 'Nearby terrain: 160 / 256');
+  controls._renderCctvState({
+    ...ready,
+    loading: { active: false, loaded: 256, total: 256 },
+  });
+  assert.equal(label.textContent, 'camera catalogue loaded');
+  assert.equal(chip.classList.contains('visible'), true);
+  assert.equal(detail.textContent, 'Nearby terrain: 256 / 256 · ready');
+  controls._renderCctvState({ ...ready, enabled: false });
+  assert.equal(chip.classList.contains('visible'), false);
+});
+
+test('cold catalogue collection reports records found without inventing a final total', (t) => {
+  const chip = element(),
+    label = {},
+    progress = {};
+  const controls = new CctvControls({
+    elements: {
+      _cctvSyncChip: chip,
+      _cctvSyncLabel: label,
+      _cctvSyncProgress: progress,
+    },
+    cctv: {},
+    actions: {
+      isEnabled: () => false,
+      setSplitFlapText: (el, text) => {
+        el.textContent = text;
+      },
+    },
+  });
+  t.after(() => controls.destroy());
+  controls._renderCctvState({
+    catalogueLoading: {
+      active: true,
+      phase: 'collecting',
+      discovered: 12000,
+      loaded: 0,
+      total: null,
+    },
+  });
+  assert.equal(chip.classList.contains('visible'), true);
+  assert.equal(label.textContent, 'collecting camera catalogue');
+  assert.equal(progress.textContent, '12,000 camera records found');
+  controls._renderCctvState({
+    catalogueLoading: {
+      active: false,
+      phase: 'cancelled',
+      discovered: 12000,
+      loaded: 0,
+      total: null,
+    },
+  });
+  assert.equal(chip.classList.contains('visible'), false);
+  assert.equal(label.textContent, 'camera catalogue incomplete');
+});
 function fixture(t) {
   const prior = globalThis.Image;
   const requests = [];

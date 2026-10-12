@@ -186,6 +186,7 @@ export function readShellElements(document = globalThis.document) {
     _cctvSyncChip: document.getElementById('cctv-sync-chip'),
     _cctvSyncLabel: document.getElementById('cctv-sync-label'),
     _cctvSyncProgress: document.getElementById('cctv-sync-progress'),
+    _cctvSyncDetail: document.getElementById('cctv-sync-detail'),
     _toast: document.getElementById('toast'),
     _locationSearch: document.getElementById('location-search'),
     _searchToggle: document.getElementById('search-toggle'),

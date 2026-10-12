@@ -31,8 +31,6 @@ export class CctvControls {
     this._cctvSummaryTypingTimer = null;
     this._lastCctvSummaryText = '';
     this._lastSeenCctvActiveId = null;
-    this._cctvChipHideTimer = null;
-    this._cctvChipWasBusy = false;
     this._cctvFrameRequestToken = 0;
     this._cctvFramePreloader = null;
     this._calibrationEdit = null;
@@ -139,9 +137,7 @@ export class CctvControls {
     this._calibrationEdit?.(false);
     this._clearCctvFrame();
     clearInterval(this._cctvSummaryTypingTimer);
-    clearTimeout(this._cctvChipHideTimer);
     this._cctvSummaryTypingTimer = null;
-    this._cctvChipHideTimer = null;
     this._cctvSyncChip?.classList.remove('visible');
   }
 }

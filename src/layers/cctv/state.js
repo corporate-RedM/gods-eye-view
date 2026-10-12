@@ -57,6 +57,7 @@ export function createState({ services }) {
   layerState._clickHandler = null;
 
   layerState._count = 0;
+  layerState._catalogueLoading = null;
 
   layerState._lastUpdate = null;
 

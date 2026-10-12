@@ -47,6 +47,12 @@ export function createCctvSource({
       let payload;
       do {
         payload = await read('/api/cctv/sources', 'sources', options);
+        options.onProgress?.({
+          discovered: payload.sources.length,
+          collecting:
+            !!payload.coverage?.loading && !payload.coverage.snapshotReady,
+        });
+        options.signal?.throwIfAborted();
         if (!payload.coverage?.loading || payload.coverage.snapshotReady) break;
         await new Promise((resolve, reject) => {
           const signal = options.signal;
