@@ -1021,7 +1021,6 @@ export class StyleManager extends ShellFacade {
         _cctvSyncChip: this._cctvSyncChip,
         _cctvSyncLabel: this._cctvSyncLabel,
         _cctvSyncProgress: this._cctvSyncProgress,
-        _cctvSyncDetail: this._cctvSyncDetail,
       },
       cctv: cctvLayer,
       actions: {

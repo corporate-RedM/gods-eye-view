@@ -46,8 +46,8 @@ registered in the browser against the full snapshot total (for example,
 CCTV is enabled. Cold server collection shows records found with no invented
 final total. `catalogueLoading` in the layer UI state carries this progress;
 registration yields every 2,048 records without publishing partial camera lists.
-The separate **Nearby terrain** line reports local positioning work. Neither
-counter counts downloaded video frames; camera feeds are opened on demand.
+Terrain positioning runs quietly in the background with no user-facing counter.
+The catalogue counter counts camera records; camera feeds are opened on demand.
 **Nearest** selects another matching feed near the viewed area's centre;
 **Focus** returns to the selected feed. Preserve these behaviors when migrating.
 

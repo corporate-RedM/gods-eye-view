@@ -67,7 +67,7 @@ export function _renderCctvState(state) {
   }
   this._lastSeenCctvActiveId = effectiveActiveId;
 
-  this._updateCctvSyncChip(state?.loading, enabled);
+  this._updateCctvSyncChip(enabled);
 
   if (this._cctvEnableBtn) {
     this._cctvEnableBtn.classList.toggle('active', enabled);
@@ -365,7 +365,7 @@ export function _typeCctvSummary(text) {
   }, 20);
 }
 
-export function _updateCctvSyncChip(loading, enabled) {
+export function _updateCctvSyncChip(enabled) {
   if (this.destroyed) return;
   if (!this._cctvSyncChip || !this._cctvSyncLabel || !this._cctvSyncProgress)
     return;
@@ -376,7 +376,7 @@ export function _updateCctvSyncChip(loading, enabled) {
   const loaded = catalogue?.loaded ?? count;
   const format = (value) => Number(value || 0).toLocaleString('en-US');
   this._cctvSyncChip.title =
-    'Full camera catalogue registered in this browser. Nearby terrain is a separate positioning budget; video feeds open on demand.';
+    'Full camera catalogue registered in this browser. Video feeds open on demand.';
   // init runs before the layer becomes enabled: its real progress must be visible too.
   this._cctvSyncChip.classList.toggle('visible', busy || enabled);
   const failed =
@@ -395,19 +395,4 @@ export function _updateCctvSyncChip(loading, enabled) {
     busy && catalogue.total == null
       ? `${format(catalogue.discovered)} camera records found`
       : `${format(loaded)} / ${format(total)} cameras`;
-  if (this._cctvSyncDetail) {
-    const nearbyTotal = Number(loading?.total) || 0;
-    const nearbyDone = Math.max(
-      0,
-      Math.min(Number(loading?.loaded) || 0, nearbyTotal),
-    );
-    const preparing = catalogue?.phase === 'preparing';
-    this._cctvSyncDetail.textContent = busy
-      ? preparing
-        ? 'Preparing camera locations'
-        : ''
-      : enabled && nearbyTotal > 0
-        ? `Nearby terrain: ${format(nearbyDone)} / ${format(nearbyTotal)}${loading?.active ? '' : ' · ready'}`
-        : '';
-  }
 }

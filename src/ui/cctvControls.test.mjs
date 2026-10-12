@@ -31,14 +31,12 @@ function element() {
 test('catalogue progress is visible during init and retains the full total after nearby terrain finishes', (t) => {
   const chip = element(),
     label = {},
-    progress = {},
-    detail = {};
+    progress = {};
   const controls = new CctvControls({
     elements: {
       _cctvSyncChip: chip,
       _cctvSyncLabel: label,
       _cctvSyncProgress: progress,
-      _cctvSyncDetail: detail,
     },
     cctv: {},
     actions: {
@@ -75,14 +73,13 @@ test('catalogue progress is visible during init and retains the full total after
   };
   controls._renderCctvState(ready);
   assert.equal(progress.textContent, '78,920 / 78,920 cameras');
-  assert.equal(detail.textContent, 'Nearby terrain: 160 / 256');
   controls._renderCctvState({
     ...ready,
     loading: { active: false, loaded: 256, total: 256 },
   });
   assert.equal(label.textContent, 'camera catalogue loaded');
   assert.equal(chip.classList.contains('visible'), true);
-  assert.equal(detail.textContent, 'Nearby terrain: 256 / 256 · ready');
+  assert.equal(progress.textContent, '78,920 / 78,920 cameras');
   controls._renderCctvState({ ...ready, enabled: false });
   assert.equal(chip.classList.contains('visible'), false);
 });

@@ -239,15 +239,6 @@
   display: none;
 }
 
-#cctv-sync-detail {
-  color: rgba(184, 244, 255, 0.75);
-  letter-spacing: 0.8px;
-}
-
-#cctv-sync-detail:empty {
-  display: none;
-}
-
 /* ── Split-flap chip text ─────────────────────────────────────────
    Per-character departure-board flip when a chip label changes.
    Driven entirely by src/splitFlap.js, which rebuilds the label as

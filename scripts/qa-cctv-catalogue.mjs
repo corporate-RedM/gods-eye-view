@@ -48,7 +48,7 @@ try {
     return {
       count: s.count, published: s.cameras.length, progress: s.catalogueLoading,
       counter: document.getElementById('cctv-sync-progress').textContent,
-      detail: document.getElementById('cctv-sync-detail').textContent,
+      detail: document.getElementById('cctv-sync-detail')?.textContent ?? null,
       visible: document.getElementById('cctv-sync-chip').classList.contains('visible'),
       samples: window.catalogueEvidence,
     };
@@ -70,7 +70,7 @@ try {
     assert.equal(sample.published, 0, 'partial lists must not be rebuilt for every progress event');
     assert.ok(!i || sample.progress.loaded >= batches[i - 1].progress.loaded);
   }
-  assert.match(result.detail, /^Nearby terrain:/);
+  assert.equal(result.detail, null, 'terrain positioning stays in the background');
   assert.deepEqual(errors, []);
   await fs.mkdir('output/completion', { recursive: true });
   await page.screenshot({ path: 'output/completion/camera-catalogue-progress.png' });
