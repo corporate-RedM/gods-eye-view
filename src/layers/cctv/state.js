@@ -58,6 +58,7 @@ export function createState({ services }) {
 
   layerState._count = 0;
   layerState._catalogueLoading = null;
+  layerState._liveOnly = false;
 
   layerState._lastUpdate = null;
 

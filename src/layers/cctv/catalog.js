@@ -83,20 +83,18 @@ export function createCatalog({ state: layerState, services, parts, source }) {
 
   /**
    * Fetches configured camera sources from the backend.
-   * @returns {Promise<Object[]>} Array of raw source objects, or empty on failure.
+   * @returns {Promise<Object[]>} Array of raw source objects; failures reject.
    */
 
   async function loadCameraSources(onProgress) {
-    try {
-      const signal = layerState._sourceAbort?.signal;
-      const data = await source.getCatalog({ signal, onProgress });
-      signal?.throwIfAborted();
-      if (!Array.isArray(data?.sources)) return [];
-      return data.sources;
-    } catch (error) {
-      if (error?.name === 'AbortError') throw error;
-      return [];
-    }
+    const signal = layerState._sourceAbort?.signal;
+    const data = await source.getCatalog({ signal, onProgress });
+    signal?.throwIfAborted();
+    layerState._liveOnly = data?.coverage?.liveOnly === true;
+    if (layerState._liveOnly && layerState._feedFilter === 'snapshot')
+      layerState._feedFilter = 'all';
+    if (!Array.isArray(data?.sources)) return [];
+    return data.sources;
   }
 
   /**

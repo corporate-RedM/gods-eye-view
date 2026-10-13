@@ -86,9 +86,10 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
     return {
       id: cameraId,
       feedType,
-      mediaUrl: isVideoFeedType(feedType)
-        ? `/api/cctv/media/${encodeURIComponent(cameraId)}`
-        : null,
+      mediaUrl:
+        isVideoFeedType(feedType) || feedType === 'mjpeg'
+          ? `/api/cctv/media/${encodeURIComponent(cameraId)}`
+          : null,
       frameUrl: `/api/cctv/frame/${encodeURIComponent(cameraId)}`,
       provider: source?.provider || '',
       sourceKind:
@@ -164,10 +165,31 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
         const url = new URL(req.url || '/', 'http://localhost');
 
         if (url.pathname === '/sources') {
+          const coverage = getCctvSources.coverage?.();
+          // Poll this small status envelope during cold collection. Do not
+          // serialize or transfer thousands of partial camera records to count them.
+          if (url.searchParams.get('status') === '1') {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+            });
+            res.end(
+              JSON.stringify({
+                count: sources.length,
+                coverage: coverage && {
+                  mode: coverage.mode,
+                  liveOnly: coverage.liveOnly,
+                  snapshotReady: coverage.snapshotReady,
+                  loading: coverage.loading,
+                  revision: coverage.revision,
+                  total: coverage.total,
+                },
+              }),
+            );
+            return;
+          }
           const body = {
-            ...(getCctvSources.coverage
-              ? { coverage: getCctvSources.coverage() }
-              : {}),
+            ...(coverage ? { coverage } : {}),
             trimmedPacks: getCctvSources.trimmedPacks?.() ?? [],
             sources: sources.map((source) => ({
               id: source.id,
@@ -249,6 +271,7 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
           const source = sourceById.get(cameraId);
           const mediaUrl = source?.url || '';
           const feedType = normalizeFeedType(source?.feedType || 'image');
+          const liveMedia = isVideoFeedType(feedType) || feedType === 'mjpeg';
           if (['iframe', 'external'].includes(feedType)) {
             res.writeHead(422, { 'Content-Type': 'application/json' });
             res.end(
@@ -457,18 +480,16 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
             } else {
               setHealth(cameraId, {
                 status: 'ok',
-                sourceKind: isVideoFeedType(feedType) ? 'live' : 'snapshot',
+                sourceKind: liveMedia ? 'live' : 'snapshot',
                 label: source?.provider || 'Configured source',
-                message: isVideoFeedType(feedType)
+                message: liveMedia
                   ? 'Live stream connected'
                   : 'Snapshot feed connected',
               });
             }
 
             await proxyMediaResponse(res, upstream, {
-              sourceHeader: isVideoFeedType(feedType)
-                ? 'live-media'
-                : 'upstream-image',
+              sourceHeader: liveMedia ? 'live-media' : 'upstream-image',
             });
             return;
           } catch (error) {

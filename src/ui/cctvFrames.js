@@ -6,6 +6,8 @@ export function _clearCctvFrame() {
   }
   this._cctvFramePreloader = null;
   if (this._cctvFrame) {
+    this._cctvFrame.onload = null;
+    this._cctvFrame.onerror = null;
     this._cctvFrame.classList.remove('active');
     this._cctvFrame.removeAttribute('src');
     this._cctvFrame.dataset.cameraId = '';
@@ -14,6 +16,36 @@ export function _clearCctvFrame() {
     this._cctvFrame.dataset.error = '';
   }
   this._cctvFrameWrap?.classList.remove('loading', 'has-frame');
+}
+
+/** A multipart MJPEG response stays on the displayed IMG, never a preloader. */
+export function syncMjpegFrame(controls, camera, visible) {
+  const image = controls._cctvFrame;
+  if (!image) return;
+  if (
+    controls._mjpegCameraId &&
+    (!visible || controls._mjpegCameraId !== camera?.id)
+  ) {
+    controls._clearCctvFrame();
+    controls._mjpegCameraId = null;
+  }
+  if (!visible || controls._mjpegCameraId === camera.id) return;
+  controls._clearCctvFrame();
+  controls._mjpegCameraId = camera.id;
+  const token = controls._cctvFrameRequestToken;
+  image.dataset.cameraId = camera.id;
+  image.dataset.loading = 'true';
+  const settle = (ok) => {
+    if (controls.destroyed || token !== controls._cctvFrameRequestToken) return;
+    image.dataset.loading = '';
+    image.dataset.error = ok ? '' : 'true';
+    controls._cctvFrameWrap?.classList.toggle('has-frame', ok);
+    controls._syncCctvSourceBadge(camera, true);
+  };
+  image.onload = () => settle(true);
+  image.onerror = () => settle(false);
+  image.classList.add('active');
+  image.src = camera.mediaUrl;
 }
 
 export function _queueCctvFrame(src, cameraId, cameraChanged) {

@@ -52,8 +52,12 @@ in coverage reporting. They have not been replaced with fabricated entries.
 The coverage JSON, browser check and screenshots are under
 `output/camera-coverage/`. The browser test compares catalogue and actual globe
 counts, checks pagination, embedded players, operator links and player cleanup.
-Source inventories persist across restarts, and failed/partial refreshes retain
-previous records. The next section records the follow-up implementation.
+That historical version persisted inventories. On 2026-10-12, BK requested
+memory-only inventories with the original 15-minute TTL, server-side exclusion
+of images and website-only links, and lightweight collection-status polling.
+All provider-listed video types (including MJPEG, MP4/WebM and unverified embeds)
+remain available for BK to judge. Playback checks are diagnostic, never an
+admission gate. The next section records the earlier follow-up implementation.
 
 ## Completion and CCTV regression repair
 
@@ -89,7 +93,7 @@ not guarantees for BK's GPU. A separate 30-request local frame-route comparison
 measured median overhead of **21.18 ms before and 0.81 ms after** (95th percentiles
 33.33 ms and 1.34 ms). That isolates local routing and does not measure upstream
 camera download time. Cold provider collection still depends on external
-services; persisted inventories avoid that wait on ordinary restarts.
+services. The later memory-only policy recollects on every server restart.
 
 Evidence is in `output/completion/`: browser control/assistant checks, scenario
 file/injection/question/playback checks, conflict cleanup, screenshots and the

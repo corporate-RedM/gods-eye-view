@@ -1,5 +1,17 @@
-import fs from 'node:fs';
-import path from 'node:path';
+/** Select provider-listed live-capable feeds; playback success is not an admission gate.
+ * The user decides whether each feed works. Never probe, whitelist, or silently
+ * discard a live candidate because its provider is unavailable during collection.
+ */
+export function createLiveCameraFilter() {
+  const filter = async (sources) =>
+    sources.filter(
+      (camera) =>
+        ['hls', 'mjpeg', 'mp4', 'webm'].includes(camera.feedType) ||
+        (camera.feedType === 'iframe' && !!camera.embedUrl),
+    );
+  filter.liveOnly = true;
+  return filter;
+}
 
 /** Full inventories: bounded concurrent downloads, never bounded camera counts. */
 export function createFullCatalog({
@@ -9,8 +21,8 @@ export function createFullCatalog({
   decorate,
   ttl,
   concurrency = 8,
+  filterSources = async (sources) => sources,
 }) {
-  const file = path.join(sourceRoot, '.cache', 'cctv-full-catalog.json');
   const states = new Map(
     packs.map((pack) => [
       pack.name,
@@ -37,11 +49,11 @@ export function createFullCatalog({
     const feeds = new Map();
     for (const pack of packs) {
       for (const camera of states.get(pack.name).sources) {
-        const urls = [
-          camera.url,
-          camera.snapshotUrl,
-          camera.externalUrl,
-        ].filter(Boolean);
+        const urls = (
+          filterSources.liveOnly
+            ? [camera.feedType === 'iframe' ? camera.embedUrl : camera.url]
+            : [camera.url, camera.snapshotUrl, camera.externalUrl]
+        ).filter(Boolean);
         const keys = urls.map(
           (url) =>
             `${Number(camera.lat).toFixed(4)},${Number(camera.lon).toFixed(4)}:${url}`,
@@ -65,19 +77,6 @@ export function createFullCatalog({
     merged = decorate([...ids.values()]);
     revision++;
   };
-  try {
-    if (fs.statSync(file).size < 200_000_000) {
-      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-      for (const [name, entry] of Object.entries(saved.packs || {})) {
-        if (states.has(name) && Array.isArray(entry.sources))
-          states.set(name, { ...entry, pack: name, state: 'stale' });
-      }
-      rebuild();
-      snapshotReady = merged.length > 0;
-    }
-  } catch {
-    /* First launch has no persisted inventories. */
-  }
   const refresh = () => {
     if (inflight) return inflight;
     let next = 0;
@@ -109,14 +108,31 @@ export function createFullCatalog({
           const normalized = normalize(pack.name, rows);
           state.offered = rows.length;
           state.inventory = rows.inventory || null;
+          const offered = normalized.sources;
+          normalized.sources = await filterSources(offered);
+          state.excluded = offered.length - normalized.sources.length;
+          state.excludedByType = {};
+          const acceptedIds = new Set(
+            normalized.sources.map((camera) => camera.id),
+          );
+          const excludedIds = new Set();
+          for (const camera of offered)
+            if (!acceptedIds.has(camera.id)) {
+              excludedIds.add(camera.id);
+              const type = camera.feedType || 'image';
+              state.excludedByType[type] =
+                (state.excludedByType[type] || 0) + 1;
+            }
           if (normalized.sources.length) {
             state.sources = rows.inventory?.partial
               ? [
                   ...new Map(
-                    [...state.sources, ...normalized.sources].map((camera) => [
-                      camera.id,
-                      camera,
-                    ]),
+                    [
+                      ...state.sources.filter(
+                        (camera) => !excludedIds.has(camera.id),
+                      ),
+                      ...normalized.sources,
+                    ].map((camera) => [camera.id, camera]),
                   ).values(),
                 ]
               : normalized.sources;
@@ -124,6 +140,15 @@ export function createFullCatalog({
             state.updatedAt = new Date().toISOString();
             delete state.error;
           } else {
+            if (offered.length && filterSources.liveOnly) {
+              state.sources = rows.inventory?.partial
+                ? state.sources.filter((camera) => !excludedIds.has(camera.id))
+                : [];
+              state.state = 'filtered';
+              delete state.error;
+              scheduleRebuild();
+              continue;
+            }
             state.state = state.sources.length
               ? 'stale'
               : ['file', 'env'].includes(pack.name)
@@ -147,21 +172,6 @@ export function createFullCatalog({
         rebuild();
         refreshed = Date.now();
         snapshotReady = true;
-        try {
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-          const tmp = file + '.tmp';
-          fs.writeFileSync(
-            tmp,
-            JSON.stringify({ packs: Object.fromEntries(states) }),
-            { mode: 0o600 },
-          );
-          fs.renameSync(tmp, file);
-        } catch (error) {
-          console.warn(
-            '[CCTV] Could not persist full catalogue:',
-            error.message,
-          );
-        }
       })
       .finally(() => {
         inflight = null;
@@ -175,6 +185,7 @@ export function createFullCatalog({
   get.trimmedPacks = () => [];
   get.coverage = () => ({
     mode: 'full',
+    liveOnly: filterSources.liveOnly === true,
     snapshotReady,
     loading: !!inflight,
     revision,

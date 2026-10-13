@@ -288,9 +288,11 @@ export async function loadCastleRock511Sources(
         cameras.filter(Boolean).map((camera) => [camera.id, camera]),
       ).values(),
     ];
-    // Dead links (streamHealth.js) fall back to the still image; a camera
-    // with neither is left out.
-    const dead = await knownDeadStreams(unique.map((camera) => camera.url));
+    // The standalone catalogue keeps provider-listed video regardless of
+    // health. Bounded library consumers retain their existing still fallback.
+    const dead = fullCatalog
+      ? new Set()
+      : await knownDeadStreams(unique.map((camera) => camera.url));
     const usable = [];
     for (const camera of unique) {
       if (!dead.has(camera.url)) usable.push(camera);

@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCctvSource, createCctvLayer } from './index.js';
 import { createLifecycle } from './lifecycle.js';
+import { createNavigation } from './navigation.js';
+
+test('the video-only catalogue keeps MJPEG, embeds and failed video streams in Live', () => {
+  const navigation = createNavigation({
+    state: { _liveOnly: true },
+    parts: { model: { isVideoFeedType: (type) => type === 'hls' } },
+  });
+  for (const camera of [
+    { feedType: 'hls' },
+    { feedType: 'mjpeg' },
+    { feedType: 'iframe', embedUrl: 'https://example.test/player' },
+  ]) {
+    const record = { camera, projection: { mode: 'image' }, liveFailed: true };
+    assert.equal(navigation.recordMatchesFeed(record, 'live'), true);
+    assert.equal(navigation.recordMatchesFeed(record, 'snapshot'), false);
+  }
+});
 
 const camera = {
   id: 'pack/camera ?x',
@@ -16,20 +33,27 @@ const camera = {
 
 test('catalogue collection publishes actual discovered counts before returning the complete snapshot', async () => {
   let calls = 0;
+  const paths = [];
   const progress = [];
   const source = createCctvSource({
-    fetchImpl: async () =>
-      Response.json(
+    fetchImpl: async (path) => {
+      paths.push(path);
+      if (path === '/api/cctv/sources')
+        return Response.json({
+          sources: [camera, { ...camera, id: 'second' }],
+        });
+      return Response.json(
         ++calls === 1
           ? {
-              sources: [camera],
+              count: 1,
               coverage: { loading: true, snapshotReady: false },
             }
           : {
-              sources: [camera, { ...camera, id: 'second' }],
+              count: 2,
               coverage: { loading: false, snapshotReady: true },
             },
-      ),
+      );
+    },
   });
   const result = await source.getCatalog({
     onProgress: (value) => progress.push(value),
@@ -39,14 +63,19 @@ test('catalogue collection publishes actual discovered counts before returning t
     { discovered: 2, collecting: false },
   ]);
   assert.equal(result.sources.length, 2);
+  assert.deepEqual(paths, [
+    '/api/cctv/sources?status=1',
+    '/api/cctv/sources?status=1',
+    '/api/cctv/sources',
+  ]);
 });
 
-test('a warm saved catalogue publishes its real count immediately during a server refresh', async () => {
+test('a warm memory catalogue publishes its real count immediately during a server refresh', async () => {
   const progress = [];
   const source = createCctvSource({
-    fetchImpl: async () =>
+    fetchImpl: async (path) =>
       Response.json({
-        sources: [camera],
+        ...(path.includes('?status=1') ? { count: 1 } : { sources: [camera] }),
         coverage: { loading: true, snapshotReady: true },
       }),
   });
@@ -116,7 +145,11 @@ test('camera catalog and health use fixed source routes and caller cancellation'
       calls.push({ path, options });
       return new Response(
         JSON.stringify(
-          path.endsWith('/sources') ? { sources: [] } : { cameras: [] },
+          path.includes('?status=1')
+            ? { count: 0 }
+            : path.endsWith('/sources')
+              ? { sources: [] }
+              : { cameras: [] },
         ),
       );
     },
@@ -126,7 +159,7 @@ test('camera catalog and health use fixed source routes and caller cancellation'
   await source.getHealth({ signal: controller.signal });
   assert.deepEqual(
     calls.map((call) => call.path),
-    ['/api/cctv/sources', '/api/cctv/health'],
+    ['/api/cctv/sources?status=1', '/api/cctv/sources', '/api/cctv/health'],
   );
   for (const { options } of calls) {
     assert.equal(options.signal, controller.signal);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CctvControls } from './cctvControls.js';
+import { syncMjpegFrame } from './cctvFrames.js';
 
 function element() {
   const classes = new Set();
@@ -146,6 +147,84 @@ function fixture(t) {
   t.after(() => controls.destroy());
   return { controls, requests };
 }
+
+test('MJPEG uses one continuous displayed IMG request and releases it on hiding, switching and destruction', (t) => {
+  const { controls, requests } = fixture(t);
+  const image = controls._cctvFrame;
+  const camera = {
+    id: 'mjpeg-1',
+    feedType: 'mjpeg',
+    mediaUrl: '/api/cctv/media/mjpeg-1',
+  };
+  syncMjpegFrame(controls, camera, true);
+  assert.equal(image.src, camera.mediaUrl);
+  assert.equal(
+    requests.length,
+    0,
+    'a preloader must never own an endless stream',
+  );
+  const onload = image.onload;
+  onload();
+  assert.ok(controls._cctvFrameWrap.classList.contains('has-frame'));
+  syncMjpegFrame(
+    controls,
+    { ...camera, mediaUrl: camera.mediaUrl + '?ts=new' },
+    true,
+  );
+  assert.equal(
+    image.src,
+    camera.mediaUrl,
+    'routine state updates must not restart the stream',
+  );
+  syncMjpegFrame(controls, camera, false);
+  assert.equal(image.src, '');
+  onload();
+  assert.equal(controls._cctvFrameWrap.classList.contains('has-frame'), false);
+  syncMjpegFrame(controls, camera, true);
+  syncMjpegFrame(
+    controls,
+    { ...camera, id: 'mjpeg-2', mediaUrl: '/api/cctv/media/mjpeg-2' },
+    true,
+  );
+  assert.equal(image.src, '/api/cctv/media/mjpeg-2');
+  controls.destroy();
+  assert.equal(image.src, '');
+  assert.equal(image.onload, null);
+});
+
+test('panel renders keep the continuous MJPEG stream until the panel is hidden', (t) => {
+  const priorDocument = globalThis.document;
+  globalThis.document = { hidden: false };
+  t.after(() => {
+    globalThis.document = priorDocument;
+  });
+  const { controls, requests } = fixture(t);
+  controls.actions.setPanelCollapsed = () => {};
+  const camera = {
+    id: 'mjpeg',
+    feedType: 'mjpeg',
+    isVideo: true,
+    mediaUrl: '/api/cctv/media/mjpeg',
+    frameUrl: '/api/cctv/frame/mjpeg',
+  };
+  const state = {
+    enabled: true,
+    activeCamera: camera,
+    activeCameraId: camera.id,
+    cameras: [camera],
+  };
+  controls._renderCctvState(state);
+  assert.equal(controls._cctvFrame.src, camera.mediaUrl);
+  controls._renderCctvState({
+    ...state,
+    activeCamera: { ...camera, mediaUrl: camera.mediaUrl + '?ts=next' },
+  });
+  assert.equal(controls._cctvFrame.src, camera.mediaUrl);
+  assert.equal(requests.length, 0);
+  globalThis.document.hidden = true;
+  controls._renderCctvState(state);
+  assert.equal(controls._cctvFrame.src, '');
+});
 
 test('a late image completion cannot replace a newer camera preview', (t) => {
   const { controls, requests } = fixture(t);

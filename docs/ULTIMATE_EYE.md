@@ -110,9 +110,12 @@ district restrictions. `EYE_CAMERA_PACK_CAP` and `EYE_EXTRA_CAMERA_CAP` are no
 longer used. Reusable provider-library consumers retain their existing bounded
 mode unless they explicitly request `fullCatalog`.
 
-Inventories persist in ignored `.cache/cctv-full-catalog.json` and survive
-restarts/provider failures. Initial collection shows progress; subsequent starts
-can use the saved inventory while refreshing. Cameras offers pagination and an
+Inventories are memory-only with a 15-minute TTL; every restart collects again.
+Collection polls a small status envelope every two seconds and transfers the
+camera list once ready. The server excludes images and website-only links;
+HLS, MJPEG, MP4/WebM and embeds remain regardless of verification results.
+MJPEG streams play continuously in the camera panel's IMG element.
+Cameras offers pagination and an
 **Export provider coverage** action. Coverage distinguishes unavailable, stale,
 and partial sources; a registered record does not establish working playback.
 See [INTEGRATION_AUDIT.md](INTEGRATION_AUDIT.md) for the first delivery's omissions,

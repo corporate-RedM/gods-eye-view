@@ -148,6 +148,7 @@ export function createPresentation({
     const activeId = active?.camera.id || null;
     const payload = {
       enabled: layerState._enabled,
+      liveOnly: layerState._liveOnly,
       // Compat boolean + the full tri-state (viewshed design §3b).
       showCoverage: layerState._coverageMode !== 'off',
       coverageMode: layerState._coverageMode,

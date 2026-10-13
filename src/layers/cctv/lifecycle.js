@@ -104,9 +104,10 @@ export function createLifecycle({
         sourceAbort.signal.throwIfAborted();
         const catalogFromSources =
           parts.catalog.buildCatalogFromSources(sources);
-        const catalog = catalogFromSources.length
-          ? catalogFromSources
-          : parts.catalog.seedCatalog();
+        const catalog =
+          catalogFromSources.length || layerState._liveOnly
+            ? catalogFromSources
+            : parts.catalog.seedCatalog();
         reportProgress('preparing', 0, catalog.length);
 
         // Viewshed color identity (design §3a): golden-angle hue over the

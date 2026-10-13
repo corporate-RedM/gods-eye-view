@@ -13,7 +13,7 @@ import {
 } from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
 import { labelPackCities } from './places.js';
-import { createFullCatalog } from './fullCatalog.js';
+import { createFullCatalog, createLiveCameraFilter } from './fullCatalog.js';
 import { cameraRegion, normalizeSourceItem } from './normalize.js';
 import {
   loadAustinSourcesFromOpenData,
@@ -169,6 +169,7 @@ export function createCctvCatalog({
   if (fullCatalog) {
     return createFullCatalog({
       sourceRoot,
+      filterSources: createLiveCameraFilter(),
       packs: [
         ...livePacks,
         {

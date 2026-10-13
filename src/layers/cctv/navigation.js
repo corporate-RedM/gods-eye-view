@@ -19,8 +19,10 @@ export function createNavigation({
   function recordMatchesFeed(record, feed) {
     if (feed !== 'live' && feed !== 'snapshot') return true;
     const live =
-      parts.model.isVideoFeedType(record.camera.feedType) &&
-      record.projection?.mode !== 'image';
+      record.camera.feedType === 'mjpeg' ||
+      (record.camera.feedType === 'iframe' && !!record.camera.embedUrl) ||
+      (parts.model.isVideoFeedType(record.camera.feedType) &&
+        (layerState._liveOnly || record.projection?.mode !== 'image'));
     return feed === 'live' ? live : !live;
   }
 

@@ -329,13 +329,14 @@ export async function loadCaltransSourcesFromOpenData({
     }
   }
 
-  // Dead stream links (see streamHealth.js) are dropped; the camera keeps
-  // its still image.
-  const deadStreams = await knownDeadStreams(
-    cameras
-      .filter((camera) => camera.feedType === 'hls')
-      .map((camera) => camera.url),
-  );
+  // Full catalogues retain video URLs even when an earlier health check failed.
+  const deadStreams = fullCatalog
+    ? new Set()
+    : await knownDeadStreams(
+        cameras
+          .filter((camera) => camera.feedType === 'hls')
+          .map((camera) => camera.url),
+      );
   for (const camera of cameras) {
     if (camera.feedType !== 'hls' || !deadStreams.has(camera.url)) continue;
     camera.feedType = 'image';
@@ -1784,11 +1785,10 @@ export async function loadDelDOTSourcesFromOpenData({
       });
     }
 
-    // DelDOT cameras are video-only (no still image to fall back to), so a
-    // camera whose stream is known dead (streamHealth.js) is left out.
-    const deadStreams = await knownDeadStreams(
-      cameras.map((camera) => camera.url),
-    );
+    // Full catalogues retain video URLs even when an earlier health check failed.
+    const deadStreams = fullCatalog
+      ? new Set()
+      : await knownDeadStreams(cameras.map((camera) => camera.url));
     const unique = Array.from(
       new Map(
         cameras

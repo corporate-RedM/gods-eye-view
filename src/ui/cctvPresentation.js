@@ -1,5 +1,6 @@
 import { createCctvVideoSurface } from './cctvVideo.js';
 import { englishProviderName } from '../data/englishNames.js';
+import { syncMjpegFrame } from './cctvFrames.js';
 
 /**
  * The panel's title lines: which camera is open and where it is, from city
@@ -75,6 +76,8 @@ export function _renderCctvState(state) {
   }
 
   if (this._cctvSelect) {
+    if (state?.liveOnly && this._cctvFeedFilter?.value === 'snapshot')
+      this._cctvFeedFilter.value = 'all';
     // The feed filter (All feeds / Live video / Snapshots) narrows the dropdown
     // and the search suggestions to cameras of that feed type only.
     const feedFilter = this._cctvFeedFilter?.value || 'all';
@@ -251,7 +254,11 @@ export function _renderCctvState(state) {
     }
   }
 
-  const liveIntent = enabled && !!activeCamera?.isVideo;
+  const liveIntent =
+    enabled && !!activeCamera?.isVideo && !activeCamera.liveFailed;
+  const mjpegIntent = liveIntent && activeCamera.feedType === 'mjpeg';
+  const videoIntent =
+    liveIntent && !mjpegIntent && activeCamera.feedType !== 'iframe';
   const externalIntent =
     enabled && ['iframe', 'external'].includes(activeCamera?.feedType);
   const externalVisible =
@@ -289,10 +296,10 @@ export function _renderCctvState(state) {
     this._cctvExternalCameraId = activeId;
   }
   if (this._cctvVideo) {
-    this._cctvVideo.hidden = !liveIntent;
-    if (this._cctvFrame) this._cctvFrame.hidden = liveIntent || externalIntent;
+    this._cctvVideo.hidden = !videoIntent;
+    if (this._cctvFrame) this._cctvFrame.hidden = videoIntent || externalIntent;
     const visible =
-      liveIntent &&
+      videoIntent &&
       !document.hidden &&
       !this._cctvPanel?.classList.contains('collapsed');
     if (!visible || this._cctvVideoCameraId !== activeId) {
@@ -313,6 +320,14 @@ export function _renderCctvState(state) {
     }
   }
 
+  syncMjpegFrame(
+    this,
+    activeCamera,
+    mjpegIntent &&
+      !document.hidden &&
+      !this._cctvPanel?.classList.contains('collapsed'),
+  );
+
   if (this._cctvFrame && !liveIntent) {
     const nextSrc = enabled && !externalIntent ? activeCamera?.frameUrl : null;
     const nextCameraId = enabled ? activeCamera?.id || '' : '';
@@ -332,7 +347,7 @@ export function _renderCctvState(state) {
     if (!nextSrc) {
       this._clearCctvFrame();
     }
-  } else if (liveIntent) {
+  } else if (liveIntent && !mjpegIntent) {
     this._clearCctvFrame();
   }
 

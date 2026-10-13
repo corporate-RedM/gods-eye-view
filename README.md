@@ -23,26 +23,38 @@ The standalone app uses full-inventory mode:
   request `fullCatalog: true`. Do not remove their separate compatibility path
   or reintroduce its caps into the standalone app.
 
-The running catalogue can therefore contain roughly 79,000 records despite the
-old 10,000 setting. Counts vary as providers refresh; they include snapshots,
-video streams, embedded players and operator links, not independently verified
-online cameras or unique physical devices. Exact shared feeds are deduplicated
-with alias IDs retained. Inventories persist in `.cache/cctv-full-catalog.json`;
-failed or partial refreshes retain previously collected records.
+The standalone catalogue is video-only: provider-listed HLS, MJPEG, MP4/WebM
+and embedded players are retained. Still-image records and website-only operator
+links are filtered out on the server. Playback checks never remove a video
+candidate: BK decides whether a feed works, including periodically refreshed
+clips and unverified embeds. Counts do not prove working playback. Exact shared
+video feeds are deduplicated with alias IDs retained.
+In full-catalogue mode, Caltrans, DelDOT and state-511 loaders also bypass their
+old health-based removal/still-image conversion, preserving the published video URL.
+
+Camera inventories live only in server memory, with the original 15-minute TTL.
+There is no catalogue read/write on disk; every server restart collects again.
+The browser polls `/api/cctv/sources?status=1` every two seconds during collection
+(counts and status only), then downloads `/api/cctv/sources` once. Failed/partial
+provider refreshes can retain records only within the same server process.
+MJPEG plays continuously in the camera panel's IMG element; collapsing the panel,
+switching cameras, hiding the tab or disposing the controls releases its stream.
+Measured counts, deleted files and playback limitations are recorded in
+[the camera catalogue change report](docs/CAMERA_CATALOGUE_CHANGE_REPORT.md).
 
 To verify the running instance, inspect
 [`/api/cctv/sources`](http://localhost:4173/api/cctv/sources): `sources.length`
 is the current count, `coverage.mode` should be `"full"`, `trimmedPacks` should
 be empty, and `coverage.packs` reports provider state. `coverage.loading: true`
-can indicate a background refresh while a saved snapshot is already available.
+can indicate a background refresh while an in-memory catalogue is available.
 Use these fields rather than an old `.env` value or a test-suite count as evidence.
 
 Performance budgets do **not** trim the inventory: the CCTV dropdown renders up
 to 250 suggestions plus the current selection while searching all records;
 terrain refinement prioritizes 256 nearby cameras and the selected camera.
 The on-screen **Loading camera catalogue** counter reports actual records
-registered in the browser against the full snapshot total (for example,
-`32,768 / 78,920`). It finishes at the actual `N / N` and stays visible while
+registered in the browser against the server's filtered video catalogue total.
+It finishes at the actual `N / N` and stays visible while
 CCTV is enabled. Cold server collection shows records found with no invented
 final total. `catalogueLoading` in the layer UI state carries this progress;
 registration yields every 2,048 records without publishing partial camera lists.

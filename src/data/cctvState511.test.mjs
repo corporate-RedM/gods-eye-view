@@ -316,4 +316,18 @@ test('a dead stream falls back to its still image, and a camera with no still is
   assert.equal(byId['us-ia-1'].feedType, 'image');
   assert.equal(byId['us-ia-1'].url, 'https://atmsqf.iowadot.gov/a.jpeg');
   assert.equal(byId['us-ia-3'].feedType, 'hls');
+  const full = await loadCastleRock511Sources('us-ia', { fullCatalog: true });
+  assert.deepEqual(full.map((camera) => camera.id).sort(), [
+    'us-ia-1',
+    'us-ia-2',
+    'us-ia-3',
+  ]);
+  assert.ok(
+    full.every((camera) => camera.feedType === 'hls'),
+    'full catalogue must retain even known-failed video URLs',
+  );
+  assert.equal(
+    full.find((camera) => camera.id === 'us-ia-1').url,
+    deadWithStill,
+  );
 });

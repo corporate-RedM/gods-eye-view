@@ -3,14 +3,112 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createFullCatalog } from '../../server/providers/cctv/fullCatalog.js';
+import {
+  createFullCatalog,
+  createLiveCameraFilter,
+} from '../../server/providers/cctv/fullCatalog.js';
 import {
   eyeCameraPacks,
   cameraToNative,
 } from '../../server/standalone/eye-cameras.js';
 import { osirisCameraRegions } from '../../integrations/osiris/app/api/cctv/route.js';
+import { cctvProxy } from '../../server/providers/cctv.js';
 
-test('full catalogue retains over 20,000 cameras, deduplicates aliases and persists inventory across failures', async (t) => {
+test('live admission retains unverified video and excludes stills and website-only links', async () => {
+  const filter = createLiveCameraFilter();
+  const rows = [
+    'image',
+    'external',
+    'mp4',
+    'webm',
+    'mjpeg',
+    'hls',
+    'iframe',
+  ].map((feedType) => ({
+    id: feedType,
+    feedType,
+    url: 'https://unavailable.invalid/feed',
+    embedUrl: feedType === 'iframe' ? 'https://unavailable.invalid/player' : '',
+  }));
+  assert.deepEqual(
+    (await filter(rows)).map((row) => row.id),
+    ['mp4', 'webm', 'mjpeg', 'hls', 'iframe'],
+  );
+  assert.equal(filter.liveOnly, true);
+});
+
+test('a refresh removes an old video ID when the provider now lists it as a still', async () => {
+  let rows = [
+    { id: 'changed', feedType: 'hls' },
+    { id: 'keep', feedType: 'mp4' },
+  ];
+  const catalog = createFullCatalog({
+    sourceRoot: '.',
+    ttl: 900000,
+    packs: [{ name: 'native', enabled: () => true, load: async () => rows }],
+    normalize: (_pack, sources) => ({ sources }),
+    decorate: (sources) => sources,
+    filterSources: createLiveCameraFilter(),
+  });
+  assert.equal((await catalog.ready()).length, 2);
+  rows = [{ id: 'changed', feedType: 'image' }];
+  rows.inventory = { partial: true };
+  assert.deepEqual(
+    (await catalog.ready()).map((camera) => camera.id),
+    ['keep'],
+  );
+  rows = [{ id: 'keep', feedType: 'image' }];
+  assert.deepEqual(await catalog.ready(), []);
+});
+
+test('collection status transfers counts without serializing partial camera records', async () => {
+  let serialized = 0;
+  const rows = [
+    {
+      id: 'live',
+      get name() {
+        serialized++;
+        return 'Camera';
+      },
+      feedType: 'hls',
+    },
+  ];
+  const sources = async () => rows;
+  sources.coverage = () => ({
+    mode: 'full',
+    liveOnly: true,
+    loading: true,
+    snapshotReady: false,
+    total: 1,
+    packs: [{ pack: 'test', retained: 1 }],
+  });
+  let handler;
+  cctvProxy({ getSources: sources }).configureServer({
+    middlewares: {
+      use(_path, callback) {
+        handler = callback;
+      },
+    },
+  });
+  let body;
+  await handler(
+    { url: '/sources?status=1', method: 'GET' },
+    {
+      writeHead() {},
+      end(value) {
+        body = JSON.parse(value);
+      },
+    },
+  );
+  assert.equal(serialized, 0);
+  assert.equal(body.count, 1);
+  assert.equal(body.coverage.liveOnly, true);
+  assert.equal(body.sources, undefined);
+  assert.equal(body.coverage.packs, undefined);
+  assert.ok(JSON.stringify(body).length < 250);
+});
+
+test('full catalogue stays in memory, deduplicates aliases and starts empty after restart', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'eye-full-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const native = Array.from({ length: 21001 }, (_, i) => ({
@@ -63,11 +161,33 @@ test('full catalogue retains over 20,000 cameras, deduplicates aliases and persi
   assert.equal(catalog.coverage().deduplicated, 1);
   assert.deepEqual(catalog.trimmedPacks(), []);
   fail = true;
+  assert.equal(
+    (await catalog.ready()).length,
+    21002,
+    'same-process cache survives a failed provider',
+  );
+  assert.deepEqual(
+    await fs.readdir(root),
+    [],
+    'collection must never create a disk inventory',
+  );
+  // An old file must not restore any cameras, even when it is still present.
+  await fs.mkdir(path.join(root, '.cache'));
+  await fs.writeFile(
+    path.join(root, '.cache/cctv-full-catalog.json'),
+    JSON.stringify({
+      packs: {
+        'osiris-extra': { sources: [{ id: 'disk-only', lat: 1, lon: 1 }] },
+      },
+    }),
+  );
   const restarted = createFullCatalog(options);
-  assert.equal((await restarted.ready()).length, 21002);
+  assert.equal(restarted.coverage().total, 0);
+  assert.equal(restarted.coverage().snapshotReady, false);
+  assert.equal((await restarted.ready()).length, 21001);
   assert.equal(
     restarted.coverage().packs.find((p) => p.pack === 'osiris-extra').state,
-    'stale',
+    'unavailable',
   );
 });
 test('every Osiris region is registered and embedded/operator cameras survive normalization', () => {

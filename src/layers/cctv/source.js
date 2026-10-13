@@ -38,22 +38,23 @@ export function createCctvSource({
     if (!response.ok) throw new Error('Camera source HTTP ' + response.status);
     const payload = await response.json();
     signal?.throwIfAborted();
-    if (!Array.isArray(payload?.[key]))
+    if (key && !Array.isArray(payload?.[key]))
       throw new Error('Malformed camera ' + key + ' snapshot');
     return payload;
   }
   return {
     async getCatalog(options = {}) {
-      let payload;
       do {
-        payload = await read('/api/cctv/sources', 'sources', options);
+        const status = await read('/api/cctv/sources?status=1', null, options);
+        if (!Number.isSafeInteger(status.count) || status.count < 0)
+          throw new Error('Malformed camera collection status');
         options.onProgress?.({
-          discovered: payload.sources.length,
+          discovered: status.count,
           collecting:
-            !!payload.coverage?.loading && !payload.coverage.snapshotReady,
+            !!status.coverage?.loading && !status.coverage.snapshotReady,
         });
         options.signal?.throwIfAborted();
-        if (!payload.coverage?.loading || payload.coverage.snapshotReady) break;
+        if (!status.coverage?.loading || status.coverage.snapshotReady) break;
         await new Promise((resolve, reject) => {
           const signal = options.signal;
           const abort = () => {
@@ -68,7 +69,7 @@ export function createCctvSource({
           if (signal?.aborted) abort();
         });
       } while (true);
-      return payload;
+      return read('/api/cctv/sources', 'sources', options);
     },
     getHealth(options) {
       return read('/api/cctv/health', 'cameras', options);
