@@ -113,7 +113,8 @@ mode unless they explicitly request `fullCatalog`.
 Inventories are memory-only with a 15-minute TTL; every restart collects again.
 Collection polls a small status envelope every two seconds and transfers the
 camera list once ready. The server excludes images and website-only links;
-HLS, MJPEG, MP4/WebM and embeds remain regardless of verification results.
+HLS, MJPEG, MP4/WebM and embeds remain when unverified; existing recorded dead
+stream verdicts are respected by both source loaders and the merged catalogue.
 MJPEG streams play continuously in the camera panel's IMG element.
 Cameras offers pagination and an
 **Export provider coverage** action. Coverage distinguishes unavailable, stale,

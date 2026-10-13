@@ -288,11 +288,9 @@ export async function loadCastleRock511Sources(
         cameras.filter(Boolean).map((camera) => [camera.id, camera]),
       ).values(),
     ];
-    // The standalone catalogue keeps provider-listed video regardless of
-    // health. Bounded library consumers retain their existing still fallback.
-    const dead = fullCatalog
-      ? new Set()
-      : await knownDeadStreams(unique.map((camera) => camera.url));
+    // Known-dead video falls back to a still, which the full catalogue excludes.
+    // An unverified stream retains its video URL.
+    const dead = await knownDeadStreams(unique.map((camera) => camera.url));
     const usable = [];
     for (const camera of unique) {
       if (!dead.has(camera.url)) usable.push(camera);

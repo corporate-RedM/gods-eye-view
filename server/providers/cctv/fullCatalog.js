@@ -1,14 +1,19 @@
-/** Select provider-listed live-capable feeds; playback success is not an admission gate.
- * The user decides whether each feed works. Never probe, whitelist, or silently
- * discard a live candidate because its provider is unavailable during collection.
+/** Keep video candidates unless an existing health verdict records them as dead.
+ * Unverified feeds and embeds stay available; no new verification probe is added.
  */
-export function createLiveCameraFilter() {
-  const filter = async (sources) =>
-    sources.filter(
-      (camera) =>
-        ['hls', 'mjpeg', 'mp4', 'webm'].includes(camera.feedType) ||
-        (camera.feedType === 'iframe' && !!camera.embedUrl),
-    );
+export function createLiveCameraFilter({
+  getDeadStreams = async () => new Set(),
+} = {}) {
+  let dead = new Set();
+  const include = (camera) =>
+    (['hls', 'mjpeg', 'mp4', 'webm'].includes(camera.feedType) ||
+      (camera.feedType === 'iframe' && !!camera.embedUrl)) &&
+    !dead.has(camera.feedType === 'iframe' ? camera.embedUrl : camera.url);
+  const filter = async (sources) => {
+    dead = await getDeadStreams();
+    return sources.filter(include);
+  };
+  filter.include = include;
   filter.liveOnly = true;
   return filter;
 }
@@ -48,7 +53,11 @@ export function createFullCatalog({
     // coordinates; nearby cameras and different viewing directions remain separate.
     const feeds = new Map();
     for (const pack of packs) {
-      for (const camera of states.get(pack.name).sources) {
+      const state = states.get(pack.name);
+      // Failed/partial packs may retain old records, but not known-dead feeds.
+      if (filterSources.include)
+        state.sources = state.sources.filter(filterSources.include);
+      for (const camera of state.sources) {
         const urls = (
           filterSources.liveOnly
             ? [camera.feedType === 'iframe' ? camera.embedUrl : camera.url]

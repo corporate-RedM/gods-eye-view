@@ -329,14 +329,12 @@ export async function loadCaltransSourcesFromOpenData({
     }
   }
 
-  // Full catalogues retain video URLs even when an earlier health check failed.
-  const deadStreams = fullCatalog
-    ? new Set()
-    : await knownDeadStreams(
-        cameras
-          .filter((camera) => camera.feedType === 'hls')
-          .map((camera) => camera.url),
-      );
+  // Preserve existing dead-stream verdicts; unverified URLs remain video.
+  const deadStreams = await knownDeadStreams(
+    cameras
+      .filter((camera) => camera.feedType === 'hls')
+      .map((camera) => camera.url),
+  );
   for (const camera of cameras) {
     if (camera.feedType !== 'hls' || !deadStreams.has(camera.url)) continue;
     camera.feedType = 'image';
@@ -1785,10 +1783,10 @@ export async function loadDelDOTSourcesFromOpenData({
       });
     }
 
-    // Full catalogues retain video URLs even when an earlier health check failed.
-    const deadStreams = fullCatalog
-      ? new Set()
-      : await knownDeadStreams(cameras.map((camera) => camera.url));
+    // Preserve existing dead-stream verdicts; unverified URLs remain video.
+    const deadStreams = await knownDeadStreams(
+      cameras.map((camera) => camera.url),
+    );
     const unique = Array.from(
       new Map(
         cameras

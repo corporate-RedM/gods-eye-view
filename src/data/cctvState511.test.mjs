@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { CASTLE_ROCK_511_SITES } from '../../server/providers/cctv/constants.js';
+import { createLiveCameraFilter } from '../../server/providers/cctv/fullCatalog.js';
 import {
   dataTablesRowToSource,
   graphqlCameraToSource,
@@ -15,6 +16,7 @@ import {
   STREAM_HEALTH_CHECK_VERSION as v,
   _resetStreamHealthForTest,
   knownDeadStreams,
+  getRecordedDeadStreams,
   settleStreamHealthChecks,
 } from '../../server/providers/cctv/streamHealth.js';
 
@@ -311,6 +313,10 @@ test('a dead stream falls back to its still image, and a camera with no still is
   );
 
   const sources = await loadCastleRock511Sources('us-ia');
+  assert.deepEqual(
+    [...(await getRecordedDeadStreams())].sort(),
+    [deadWithStill, deadNoStill].sort(),
+  );
   const byId = Object.fromEntries(sources.map((s) => [s.id, s]));
   assert.deepEqual(Object.keys(byId).sort(), ['us-ia-1', 'us-ia-3']);
   assert.equal(byId['us-ia-1'].feedType, 'image');
@@ -319,15 +325,14 @@ test('a dead stream falls back to its still image, and a camera with no still is
   const full = await loadCastleRock511Sources('us-ia', { fullCatalog: true });
   assert.deepEqual(full.map((camera) => camera.id).sort(), [
     'us-ia-1',
-    'us-ia-2',
     'us-ia-3',
   ]);
-  assert.ok(
-    full.every((camera) => camera.feedType === 'hls'),
-    'full catalogue must retain even known-failed video URLs',
-  );
   assert.equal(
-    full.find((camera) => camera.id === 'us-ia-1').url,
-    deadWithStill,
+    full.find((camera) => camera.id === 'us-ia-1').feedType,
+    'image',
+  );
+  assert.deepEqual(
+    (await createLiveCameraFilter()(full)).map((camera) => camera.id),
+    ['us-ia-3'],
   );
 });

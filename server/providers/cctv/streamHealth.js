@@ -225,6 +225,14 @@ export async function knownDeadStreams(urls, { fetchImpl = fetch } = {}) {
   return new Set(urls.filter((url) => health.get(url)?.live === false));
 }
 
+/** Read existing dead verdicts without probing or changing the health cache. */
+export async function getRecordedDeadStreams() {
+  await readDiskOnce();
+  return new Set(
+    [...health].filter(([, entry]) => entry.live === false).map(([url]) => url),
+  );
+}
+
 /** Wait for the background check to finish (tests and seeding scripts). */
 export async function settleStreamHealthChecks() {
   while (probing || pending.size) {

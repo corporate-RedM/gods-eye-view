@@ -56,8 +56,9 @@ That historical version persisted inventories. On 2026-10-12, BK requested
 memory-only inventories with the original 15-minute TTL, server-side exclusion
 of images and website-only links, and lightweight collection-status polling.
 All provider-listed video types (including MJPEG, MP4/WebM and unverified embeds)
-remain available for BK to judge. Playback checks are diagnostic, never an
-admission gate. The next section records the earlier follow-up implementation.
+remain available for BK to judge unless an existing stream-health verdict records
+them as dead (BK's 2026-10-13 correction). The browser sample checks are diagnostic;
+they do not write those verdicts. The next section records the earlier implementation.
 
 ## Completion and CCTV regression repair
 

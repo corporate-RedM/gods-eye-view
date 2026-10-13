@@ -37,6 +37,64 @@ test('live admission retains unverified video and excludes stills and website-on
   assert.equal(filter.liveOnly, true);
 });
 
+test('recorded dead URLs are excluded across packs while unverified feeds survive', async () => {
+  let dead = new Set(['https://camera.test/dead.m3u8']);
+  const filter = createLiveCameraFilter({ getDeadStreams: async () => dead });
+  let fail = false;
+  const rows = [
+    {
+      id: 'native-dead',
+      feedType: 'hls',
+      url: 'https://camera.test/dead.m3u8',
+    },
+    {
+      id: 'osiris-dead-alias',
+      feedType: 'hls',
+      url: 'https://camera.test/dead.m3u8',
+    },
+    {
+      id: 'unverified',
+      feedType: 'hls',
+      url: 'https://camera.test/unknown.m3u8',
+    },
+    {
+      id: 'unverified-embed',
+      feedType: 'iframe',
+      embedUrl: 'https://camera.test/player',
+    },
+  ];
+  const catalog = createFullCatalog({
+    sourceRoot: '.',
+    ttl: 900000,
+    packs: [
+      {
+        name: 'video',
+        enabled: () => true,
+        load: async () => {
+          if (fail) throw new Error('offline');
+          return rows;
+        },
+      },
+      { name: 'other', enabled: () => true, load: async () => [] },
+    ],
+    normalize: (_pack, sources) => ({ sources }),
+    decorate: (sources) => sources,
+    filterSources: filter,
+  });
+  assert.deepEqual(
+    (await catalog.ready()).map((camera) => camera.id),
+    ['unverified', 'unverified-embed'],
+  );
+  dead = new Set([...dead, 'https://camera.test/unknown.m3u8']);
+  fail = true;
+  assert.deepEqual(
+    (await catalog.ready()).map((camera) => camera.id),
+    ['unverified-embed'],
+    'stale pack records must also respect newly recorded dead verdicts',
+  );
+  assert.equal(catalog.coverage().deduplicated, 0);
+});
+
 test('a refresh removes an old video ID when the provider now lists it as a still', async () => {
   let rows = [
     { id: 'changed', feedType: 'hls' },

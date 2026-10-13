@@ -25,12 +25,13 @@ The standalone app uses full-inventory mode:
 
 The standalone catalogue is video-only: provider-listed HLS, MJPEG, MP4/WebM
 and embedded players are retained. Still-image records and website-only operator
-links are filtered out on the server. Playback checks never remove a video
-candidate: BK decides whether a feed works, including periodically refreshed
-clips and unverified embeds. Counts do not prove working playback. Exact shared
+links and streams already recorded as dead are filtered out on the server.
+Unverified feeds remain, including periodically refreshed clips and embedded
+players. Counts do not prove working playback. Exact shared
 video feeds are deduplicated with alias IDs retained.
-In full-catalogue mode, Caltrans, DelDOT and state-511 loaders also bypass their
-old health-based removal/still-image conversion, preserving the published video URL.
+Caltrans, DelDOT and state-511 loaders retain their existing dead-stream checks.
+The merged catalogue also reads saved dead verdicts so aliases from other packs
+cannot reintroduce those URLs. This adds no new probes or verification requirement.
 
 Camera inventories live only in server memory, with the original 15-minute TTL.
 There is no catalogue read/write on disk; every server restart collects again.
