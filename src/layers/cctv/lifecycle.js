@@ -4,8 +4,6 @@ import { CCTV_OVERLAY_SOURCE_ID } from '../../data/cctvCards.js';
 import { GIZMO_ID_PREFIX } from '../../data/cctvGizmo.js';
 import {
   GROUND_PRIOR_INIT_WAIT_MS,
-  CAMERA_ICON,
-  IDLE_CAMERA_COLOR,
   CALIBRATION_RANGE_FLOOR_M,
 } from './policy.js';
 
@@ -84,6 +82,11 @@ export function createLifecycle({
           parts.presentation.notifyListeners();
         };
         reportProgress('fetching', 0, null, 0);
+        if (services.render.waitForCameraGridSurface)
+          await services.render.waitForCameraGridSurface({
+            signal: sourceAbort.signal,
+          });
+        sourceAbort.signal.throwIfAborted();
 
         layerState._billboards = new Cesium.BillboardCollection();
         // Keep partially registered billboards out of rendering until culling is ready.
@@ -102,8 +105,16 @@ export function createLifecycle({
           },
         );
         sourceAbort.signal.throwIfAborted();
-        const catalogFromSources =
-          parts.catalog.buildCatalogFromSources(sources);
+        const catalogFromSources = [];
+        for (let offset = 0; offset < sources.length; offset += 128) {
+          catalogFromSources.push(
+            ...parts.catalog.buildCatalogFromSources(
+              sources.slice(offset, offset + 128),
+            ),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          sourceAbort.signal.throwIfAborted();
+        }
         const catalog =
           catalogFromSources.length || layerState._liveOnly
             ? catalogFromSources
@@ -120,7 +131,8 @@ export function createLifecycle({
             .map((id, index) => [id, index]),
         );
 
-        for (const camera of catalog) {
+        for (let index = 0; index < catalog.length; index++) {
+          const camera = catalog[index];
           const savedEntry = layerState._calibrationById.get(camera.id);
           if (savedEntry) {
             // Entries saved before the range floor dropped (no rangeFloorM)
@@ -138,6 +150,10 @@ export function createLifecycle({
             camera.calSource = savedEntry.source;
           }
           parts.model.ensureCameraPose(camera);
+          if ((index + 1) % 128 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            sourceAbort.signal.throwIfAborted();
+          }
         }
 
         // Task 5 (height-datum fix): batch ALL camera coords through the Re:Earth
@@ -176,32 +192,11 @@ export function createLifecycle({
             camera.lat,
             camera.absoluteHeightM,
           );
-          const billboard = layerState._billboards.add({
-            id: camera.id,
-            image: CAMERA_ICON,
-            position,
-            color: IDLE_CAMERA_COLOR,
-            width: 24,
-            height: 24,
-            // Field-test fix (2026-07-06): always-on-top. The old finite value
-            // (1800 m) re-engaged the depth test at far zoom, where the COARSE
-            // far-LOD Google-3D mesh sits above the true ground and swallowed
-            // ground-anchored icons ("submerged" pills over SF). Far-side-of-globe
-            // icons are handled by refreshHorizonCulling() (the flights-layer
-            // EllipsoidalOccluder pattern), not by the depth test.
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            scaleByDistance: new Cesium.NearFarScalar(
-              350,
-              1.25,
-              4_000_000,
-              0.42,
-            ),
-          });
-
           const record = {
             camera,
             position,
-            billboard,
+            // Created by the paced geometry queue, never as one hidden grid.
+            billboard: null,
             coverageEntities: [],
             projection: null,
             // Task 5 (height-datum fix): regime-aware ground resolution state.
@@ -240,7 +235,7 @@ export function createLifecycle({
           };
           layerState._records.push(record);
           layerState._recordById.set(camera.id, record);
-          if ((i + 1) % 2048 === 0 || i + 1 === catalog.length) {
+          if ((i + 1) % 128 === 0 || i + 1 === catalog.length) {
             layerState._count = layerState._records.length;
             reportProgress('registering', layerState._count, catalog.length);
             // Yield after real work so the UI can paint progress and accept input.
@@ -373,11 +368,10 @@ export function createLifecycle({
         await parts.health.syncHealthState(true);
         sourceAbort.signal.throwIfAborted();
         parts.rendering.refreshCoverageStyles();
-        layerState._billboards.show = true;
         layerState._catalogueLoading = {
-          active: false,
-          phase: 'ready',
-          loaded: layerState._count,
+          active: layerState._count > 0,
+          phase: layerState._count > 0 ? 'placing' : 'ready',
+          loaded: 0,
           total: layerState._count,
           discovered: catalog.length,
         };
@@ -466,6 +460,8 @@ export function createLifecycle({
     disable() {
       services.credits?.hideOsmCredit?.(layerState._viewer, 'cctv');
       layerState._enabled = false;
+      if (layerState._catalogueLoading?.phase === 'placing')
+        layerState._catalogueLoading.active = false;
       unregisterPickOwner('cctv');
       // ADJUST mode does not survive a layer toggle — predictable re-entry.
       layerState._calibrationMode = false;

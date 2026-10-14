@@ -4,6 +4,7 @@ import { isHeadingEstimated } from './headingConfidence.js';
 import {
   ACTIVE_CAMERA_COLOR,
   IDLE_CAMERA_COLOR,
+  CAMERA_ICON,
   ACTIVE_COVERAGE_CENTER,
   IDLE_COVERAGE_CENTER_MUTED,
   ACTIVE_COVERAGE_CENTER_DEPTHFAIL,
@@ -25,6 +26,28 @@ export function createRendering({
     advanceSpriteFocus,
     focusAlphaNeedsWrite,
   } = services.focus;
+
+  function placeCameraMarker(record) {
+    if (record.billboard) return;
+    const active = record.camera.id === layerState._activeCameraId;
+    record.billboard = layerState._billboards.add({
+      id: record.camera.id,
+      image: CAMERA_ICON,
+      position: record.position,
+      color: active ? ACTIVE_CAMERA_COLOR : IDLE_CAMERA_COLOR,
+      scale: active ? 1.25 : 1,
+      width: 24,
+      height: 24,
+      show:
+        horizonOccluder(layerState._viewer.camera).isPointVisible(
+          record.position,
+        ) &&
+        (active ||
+          parts.navigation.recordMatchesFeed(record, layerState._feedFilter)),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      scaleByDistance: new Cesium.NearFarScalar(350, 1.25, 4_000_000, 0.42),
+    });
+  }
 
   /**
    * Focus modulation rides the layer's existing animation loop; no additional
@@ -330,6 +353,7 @@ export function createRendering({
     parts.projection.pauseInactiveProjectionFeeds(activeId);
   }
   return {
+    placeCameraMarker,
     refreshCctvFocusStyles,
     applyCctvFocusDeemphasis,
     refreshHorizonCulling,

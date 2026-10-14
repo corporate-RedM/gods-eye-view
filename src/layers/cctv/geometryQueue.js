@@ -101,13 +101,19 @@ export function createGeometryQueue({
     visit,
     progress,
     complete,
+    budgetMs = Infinity,
   }) {
     const safeQueue = Array.isArray(queue) ? queue : [];
     const take = Number.isFinite(batchSize)
       ? Math.max(1, Math.floor(batchSize))
       : 1;
-    const batch = safeQueue.splice(0, take);
-    for (const record of batch) visit?.(record);
+    const start = performance.now();
+    let visited = 0;
+    while (visited < take && visited < safeQueue.length) {
+      visit?.(safeQueue[visited++]);
+      if (performance.now() - start >= budgetMs) break;
+    }
+    safeQueue.splice(0, visited);
     if (safeQueue.length) {
       progress?.();
       return true;
@@ -160,14 +166,20 @@ export function createGeometryQueue({
     visit,
     progress,
     complete,
+    placing = false,
   }) {
     const pacing = cctvGeometryDrainPacing(readOwnership?.() || {});
+    if (placing && pacing.batchSize === GEO_LOAD_BATCH_SIZE) {
+      pacing.batchSize = 64;
+      pacing.delayMs = 16;
+    }
     const hasMore = processCctvGeometryQueueBatch({
       queue,
       batchSize: pacing.batchSize,
       visit,
       progress,
       complete,
+      budgetMs: placing ? 6 : Infinity,
     });
     return { hasMore, ...pacing };
   }
@@ -203,12 +215,14 @@ export function createGeometryQueue({
     }
     // Active-camera-first is re-established every batch because the operator
     // can select a new camera while a long catalog drain is in flight.
-    prioritizeActiveCctvGeometryRecord(
-      layerState._geoQueue,
-      parts.selection.getActiveRecord(),
-    );
+    if (layerState._catalogueLoading?.phase !== 'placing')
+      prioritizeActiveCctvGeometryRecord(
+        layerState._geoQueue,
+        parts.selection.getActiveRecord(),
+      );
     const batchResult = processCctvGeometryDrainBatch({
       queue: layerState._geoQueue,
+      placing: layerState._catalogueLoading?.phase === 'placing',
       readOwnership: () => ({
         trackedEntity: layerState._viewer.trackedEntity,
         cockpitActive:
@@ -224,17 +238,24 @@ export function createGeometryQueue({
             err?.message || err,
           );
         }
+        parts.rendering.placeCameraMarker?.(record);
         if (
           layerState._geoLoading &&
           layerState._geoLoadDone < layerState._geoLoadTotal
         ) {
           layerState._geoLoadDone += 1;
         }
+        if (layerState._catalogueLoading?.phase === 'placing')
+          layerState._catalogueLoading.loaded = layerState._billboards.length;
       },
       progress: () => layerState._geoProgressNotifier?.progress(),
       complete: () => {
         const wasInitialLoad = layerState._geoLoading;
         layerState._geoLoading = false;
+        if (layerState._catalogueLoading?.phase === 'placing') {
+          layerState._catalogueLoading.active = false;
+          layerState._catalogueLoading.phase = 'ready';
+        }
         if (wasInitialLoad) {
           layerState._geoLoadDone = layerState._geoLoadTotal;
           if (layerState._enabled) {
@@ -251,6 +272,7 @@ export function createGeometryQueue({
         layerState._geoProgressNotifier = null;
       },
     });
+    layerState._viewer.scene?.requestRender?.();
     if (batchResult.hasMore) {
       layerState._geoQueueTimer = setTimeout(
         processGeometryBatch,
@@ -291,12 +313,20 @@ export function createGeometryQueue({
    */
 
   function startGeometryLoadQueue() {
+    // A camera settle must not reset an in-progress full-grid placement.
+    if (
+      layerState._geoLoading &&
+      layerState._catalogueLoading?.phase === 'placing'
+    )
+      return;
     stopGeometryLoadQueue();
     // Fresh drain → fresh one-shot completion pass: re-arm the tiles-ready
     // latch so update() can complete any records this drain leaves unresolved.
     layerState._tilesReadyReenqueued = false;
     if (!layerState._records.length) return;
-    const active = parts.selection.getActiveRecord();
+    const placing = layerState._catalogueLoading?.phase === 'placing';
+    if (placing) layerState._catalogueLoading.active = true;
+    const active = placing ? null : parts.selection.getActiveRecord();
     const carto = layerState._viewer?.camera?.positionCartographic;
     const refLat = carto
       ? Cesium.Math.toDegrees(carto.latitude)
@@ -311,7 +341,7 @@ export function createGeometryQueue({
       (record) => record.camera,
     );
     parts.ground.warmNearbyGround?.(active ? [active, ...nearby] : nearby);
-    const pending = nearby
+    const pending = (placing ? layerState._records : nearby)
       .filter((record) => record !== active)
       .map((record) => ({
         record,

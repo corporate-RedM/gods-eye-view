@@ -1,6 +1,7 @@
 import { createCctvVideoSurface } from './cctvVideo.js';
 import { englishProviderName } from '../data/englishNames.js';
 import { syncMjpegFrame } from './cctvFrames.js';
+import { populateCameraOptions } from './cctvCameraList.js';
 
 /**
  * The panel's title lines: which camera is open and where it is, from city
@@ -83,20 +84,12 @@ export function _renderCctvState(state) {
     const feedFilter = this._cctvFeedFilter?.value || 'all';
     const matchesFilter = (cam) =>
       feedFilter === 'all' || (feedFilter === 'live') === !!cam.isVideo;
-    const query = (this._cctvSearch?.value || '').trim().toLowerCase();
-    const matches = cameras.filter(
-      (cam) =>
-        matchesFilter(cam) &&
-        (!query ||
-          `${cam.city} ${cam.name} ${cam.id}`.toLowerCase().includes(query)),
-    );
-    // Keep every record searchable without creating 160,000 option nodes.
-    const listed = matches.slice(0, 250);
-    const selected = cameras.find((cam) => cam.id === activeId);
-    if (selected && matchesFilter(selected) && !listed.includes(selected))
-      listed.push(selected);
+    // Keep the complete list stable while typing. The native datalist filters
+    // suggestions; rebuilding it from the typed label can discard a selection
+    // before its change event reaches the camera picker.
+    const listed = cameras.filter(matchesFilter);
     if (this._cctvSearch)
-      this._cctvSearch.placeholder = `Search all ${cameras.length.toLocaleString()} cameras (${matches.length.toLocaleString()} matches)`;
+      this._cctvSearch.placeholder = `Search all ${listed.length.toLocaleString()} cameras`;
     // isVideo and liveFailed are part of the signature: a stream that falls
     // back to its still image moves the camera from Live video to Snapshots,
     // labelled LIVE OFFLINE.
@@ -124,28 +117,10 @@ export function _renderCctvState(state) {
       // camera id appended so every suggestion resolves to exactly one camera.
       this._cctvSearchIds = new Map();
       if (this._cctvSearchOptions) this._cctvSearchOptions.innerHTML = '';
-      for (const camera of listed) {
-        const option = document.createElement('option');
-        option.value = camera.id;
-        const feedTag = camera.isVideo
-          ? ' · LIVE'
-          : camera.liveFailed
-            ? ' · LIVE OFFLINE'
-            : '';
-        option.textContent = `${camera.city} · ${camera.name}${feedTag}`;
-        this._cctvSelect.appendChild(option);
-        let searchLabel = option.textContent;
-        if (this._cctvSearchIds.has(searchLabel))
-          searchLabel = `${searchLabel} · ${camera.id}`;
-        this._cctvSearchIds.set(searchLabel, camera.id);
-        if (this._cctvSearchOptions) {
-          const suggestion = document.createElement('option');
-          suggestion.value = searchLabel;
-          this._cctvSearchOptions.appendChild(suggestion);
-        }
-      }
+      populateCameraOptions(this, listed, signature);
     }
-    this._cctvSelect.disabled = !enabled || cameras.length === 0;
+    this._cctvSelect.disabled =
+      !enabled || cameras.length === 0 || !!this._cctvListPending;
     if (this._cctvSearch) this._cctvSearch.disabled = this._cctvSelect.disabled;
     if (this._cctvFeedFilter)
       this._cctvFeedFilter.disabled = this._cctvSelect.disabled;
@@ -401,13 +376,14 @@ export function _updateCctvSyncChip(enabled) {
     busy
       ? catalogue.total == null
         ? 'collecting camera catalogue'
-        : 'loading camera catalogue'
+        : 'loading frames'
       : failed
         ? 'camera catalogue incomplete'
-        : 'camera catalogue loaded',
+        : 'camera grid ready',
   );
+  const placed = busy && catalogue.phase !== 'placing' ? 0 : loaded;
   this._cctvSyncProgress.textContent =
     busy && catalogue.total == null
       ? `${format(catalogue.discovered)} camera records found`
-      : `${format(loaded)} / ${format(total)} cameras`;
+      : `${format(placed)} / ${format(total)} cameras`;
 }

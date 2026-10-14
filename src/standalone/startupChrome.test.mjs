@@ -10,12 +10,13 @@ const source = readFileSync(
   .replace(/^import .*;\n/gm, '')
   .replace('export function', 'function');
 
-function fixture() {
+function fixture({ collecting = false } = {}) {
   const timers = new Map();
   const listeners = new Map();
   const events = [];
   let restored;
   let nextTimer = 0;
+  let cameraListener;
   const controller = new AbortController();
   const context = {
     console,
@@ -49,7 +50,24 @@ function fixture() {
         restored = resolve;
       }),
     },
-    dataManager: {},
+    dataManager: {
+      layers: new Map([
+        [
+          'cctv',
+          {
+            module: {
+              subscribe(listener) {
+                cameraListener = listener;
+                return () => {
+                  cameraListener = null;
+                };
+              },
+              getUIState: () => ({ catalogueLoading: { active: collecting } }),
+            },
+          },
+        ],
+      ]),
+    },
     signal: controller.signal,
   });
   return {
@@ -58,6 +76,10 @@ function fixture() {
     stop,
     restored,
     controller,
+    collect() {
+      cameraListener?.({ catalogueLoading: { active: true } });
+    },
+    hasCameraListener: () => !!cameraListener,
     fire(delay) {
       for (const [id, task] of timers) {
         if (task.delay === delay) {
@@ -72,6 +94,36 @@ function fixture() {
 async function flush() {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 }
+
+for (const collecting of [false, true]) {
+  test(`camera loading reveals GUI before restoration finishes (already collecting: ${collecting})`, async () => {
+    const f = fixture({ collecting });
+    if (!collecting) f.collect();
+    await flush();
+    assert.deepEqual(f.events, []);
+    f.fire(1000);
+    await flush();
+    assert.deepEqual(f.events, ['hidden']);
+    assert.equal(f.hasCameraListener(), false);
+    f.listeners.get('transitionend')();
+    assert.deepEqual(f.events, ['hidden']);
+    f.restored();
+    await flush();
+    assert.deepEqual(f.events, ['hidden', 'welcome']);
+    await f.stop();
+    assert.equal(f.timers.size, 0);
+  });
+}
+
+test('shutdown cancels an early camera-progress reveal', async () => {
+  const f = fixture({ collecting: true });
+  f.controller.abort();
+  await f.stop();
+  f.restored();
+  await flush();
+  assert.deepEqual(f.events, ['settings:destroy']);
+  assert.equal(f.hasCameraListener(), false);
+});
 
 test('welcome waits for restoration, minimum delay, and the cover transition', async () => {
   const f = fixture();

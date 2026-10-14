@@ -29,6 +29,78 @@ function element() {
   };
 }
 
+test('camera search and picker retain the complete catalogue across typed labels and state updates', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const select = {
+    options: [],
+    set innerHTML(value) {
+      this.options = [];
+    },
+    appendChild(option) {
+      this.options.push(option);
+    },
+  };
+  const suggestions = {
+    options: [],
+    set innerHTML(value) {
+      this.options = [];
+    },
+    appendChild(option) {
+      this.options.push(option);
+    },
+  };
+  const priorDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({}) };
+  t.after(() => {
+    globalThis.document = priorDocument;
+  });
+  const search = { value: '' };
+  const controls = new CctvControls({
+    elements: {
+      _cctvSelect: select,
+      _cctvSearch: search,
+      _cctvSearchOptions: suggestions,
+    },
+    cctv: {},
+    actions: { isEnabled: () => true, setPanelCollapsed() {} },
+  });
+  t.after(() => controls.destroy());
+  const cameras = Array.from({ length: 1400 }, (_, i) => ({
+    id: `camera-${i}`,
+    city: 'Toronto',
+    name: `Road ${i}`,
+    isVideo: true,
+  }));
+  cameras[1398].name = cameras[1399].name;
+  const state = { enabled: true, count: cameras.length, cameras };
+  controls._renderCctvState(state);
+  assert.equal(select.options.length, 128);
+  assert.equal(select.disabled, true);
+  for (let i = 0; i < 20; i++) t.mock.timers.tick(1);
+  assert.equal(select.options.length, 1400);
+  assert.equal(select.disabled, false);
+  assert.equal(suggestions.options.length, 1400);
+  assert.equal(controls._cctvSearchIds.size, 1400);
+  const label = suggestions.options[1399].value;
+  assert.equal(controls._cctvSearchIds.get(label), 'camera-1399');
+  assert.match(suggestions.options[1399].label, /camera-1399/);
+  search.value = label;
+  controls._renderCctvState({ ...state, activeCameraId: 'camera-0' });
+  assert.equal(controls._cctvSearchIds.get(search.value), 'camera-1399');
+  assert.equal(select.options.length, 1400);
+  search.value = 'Road';
+  controls._renderCctvState(state);
+  assert.equal(suggestions.options.length, 1400);
+  search.value = '';
+  controls._renderCctvState(state);
+  assert.equal(suggestions.options.length, 1400);
+  controls._renderCctvState({ ...state, cameras: cameras.slice(0, -1) });
+  const partial = select.options.length;
+  controls.destroy();
+  for (let i = 0; i < 20; i++) t.mock.timers.tick(1);
+  assert.equal(select.options.length, partial);
+});
+
 test('catalogue progress is visible during init and retains the full total after nearby terrain finishes', (t) => {
   const chip = element(),
     label = {},
@@ -53,13 +125,13 @@ test('catalogue progress is visible during init and retains the full total after
     count: 2048,
     catalogueLoading: {
       active: true,
-      phase: 'registering',
+      phase: 'placing',
       loaded: 2048,
       total: 78920,
     },
   });
   assert.equal(chip.classList.contains('visible'), true);
-  assert.equal(label.textContent, 'loading camera catalogue');
+  assert.equal(label.textContent, 'loading frames');
   assert.equal(progress.textContent, '2,048 / 78,920 cameras');
   const ready = {
     enabled: true,
@@ -78,7 +150,7 @@ test('catalogue progress is visible during init and retains the full total after
     ...ready,
     loading: { active: false, loaded: 256, total: 256 },
   });
-  assert.equal(label.textContent, 'camera catalogue loaded');
+  assert.equal(label.textContent, 'camera grid ready');
   assert.equal(chip.classList.contains('visible'), true);
   assert.equal(progress.textContent, '78,920 / 78,920 cameras');
   controls._renderCctvState({ ...ready, enabled: false });

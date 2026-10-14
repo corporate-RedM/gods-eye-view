@@ -128,6 +128,7 @@ export class CctvControls {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    clearTimeout(this._cctvListTimer);
     this._cctvVideoSurface?.stop();
     this._videoVisibilityObserver?.disconnect();
     this._actionGeneration++;
