@@ -22,6 +22,7 @@ export async function fetchHlsBytes(
     signal,
     maxBytes,
     timeoutMs = HLS_LIMITS.timeoutMs,
+    headers = {},
   } = {},
 ) {
   const controller = new AbortController();
@@ -36,7 +37,7 @@ export async function fetchHlsBytes(
     response = await fetchImpl(url, {
       redirect: 'error',
       signal: controller.signal,
-      headers: { 'User-Agent': 'gods-eye-view-cctv-proxy/1.0' },
+      headers: { 'User-Agent': 'gods-eye-view-cctv-proxy/1.0', ...headers },
     });
     if (
       !response.ok ||
@@ -142,6 +143,7 @@ export function parseHlsMedia(text, base, limit = HLS_LIMITS.segments) {
 export function createHlsPuller({
   fetchImpl = fetch,
   limits = HLS_LIMITS,
+  resolveSource,
 } = {}) {
   const active = new Map();
   let closed = false;
@@ -188,10 +190,19 @@ export function createHlsPuller({
       signal: entry.controller.signal,
       maxBytes,
       timeoutMs: limits.timeoutMs,
+      headers: entry.resolved?.headers,
     });
   const poll = async (entry) => {
     try {
-      let base = entry.chunklistUrl || entry.url;
+      if (!entry.resolved && resolveSource) {
+        entry.resolved = await resolveSource(
+          entry.cameraId,
+          entry.url,
+          entry.controller.signal,
+        );
+        sameOriginHlsUrl(entry.resolved.url, entry.url);
+      }
+      let base = entry.chunklistUrl || entry.resolved?.url || entry.url;
       let text = (await read(entry, base, limits.playlistBytes)).toString(
         'utf8',
       );
@@ -202,7 +213,7 @@ export function createHlsPuller({
           .find((line) => line && !line.startsWith('#'));
         if (!variant || !text.includes('#EXT-X-STREAM-INF:'))
           throw new Error('Missing HLS variant');
-        base = sameOriginHlsUrl(variant, entry.url);
+        base = sameOriginHlsUrl(variant, base);
         text = (await read(entry, base, limits.playlistBytes)).toString('utf8');
       }
       entry.chunklistUrl = base;
@@ -281,6 +292,7 @@ export function createHlsPuller({
       entry.failures = 0;
     } catch {
       entry.chunklistUrl = null;
+      entry.resolved = null;
       entry.failures++;
       if (entry.failures >= 3) {
         stop(entry.cameraId, entry.token);

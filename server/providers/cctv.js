@@ -18,6 +18,8 @@ import {
 } from './cctv/constants.js';
 import { sanitizeCctvRangeHeader } from './cctv/range.js';
 import { createHlsPuller } from './cctv/stream.js';
+import { resolveIbiPublicStream } from './cctv/publicIbiVideo.js';
+import { resolveDriveTexasStream } from './cctv/driveTexasVideo.js';
 import { createCctvWatch } from './cctv/watch/index.js';
 import { handleWatchRoute } from './cctv/watch/routes.js';
 import { googleServerApiKey } from './places/google-key.js';
@@ -47,7 +49,14 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
    * for any catalog the proxy can actually serve. */
   const HEALTH_MAX_ENTRIES = CCTV_MAX_SOURCES_CEILING;
   /** Live HLS strategies (see ./cctv/stream.js). Shared across dev and preview. */
-  const puller = createHlsPuller();
+  const puller = createHlsPuller({
+    resolveSource: (cameraId, url, signal) => {
+      const source = sourceById.get(cameraId) || { url };
+      return source.sourceKind === 'drivetexas-public-video'
+        ? resolveDriveTexasStream(source, { signal })
+        : resolveIbiPublicStream(source, { signal });
+    },
+  });
   /**
    * CCTV Watch reads this proxy's own catalog instance, so watching never
    * fetches the upstream camera catalogs a second time. It does nothing until

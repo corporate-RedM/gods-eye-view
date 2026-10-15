@@ -9,6 +9,11 @@ import { standaloneVoiceTools } from './voiceTools.js';
 import { eyeApiPlugin } from './eye-api.js';
 import { eyeCameraPacks } from './eye-cameras.js';
 import { createCctvCatalog } from '../providers/cctv/catalog.js';
+import { publicVideoPacks } from '../providers/cctv/publicVideo.js';
+import { ibiPublicVideoPacks } from '../providers/cctv/publicIbiVideo.js';
+import { driveTexasVideoPack } from '../providers/cctv/driveTexasVideo.js';
+import { mississippiVideoPack } from '../providers/cctv/mississippiVideo.js';
+import { rhodeIslandVideoPack } from '../providers/cctv/rhodeIslandVideo.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -20,7 +25,15 @@ export default defineConfig(({ command, mode }) => {
   }
   const getSources = createCctvCatalog({
     sourceRoot: root,
-    extraPacks: eyeCameraPacks(),
+    // Prefer publisher adapters that refresh playback tokens over aggregator URLs.
+    extraPacks: [
+      ...eyeCameraPacks(),
+      ...ibiPublicVideoPacks(),
+      driveTexasVideoPack(),
+      mississippiVideoPack(),
+      rhodeIslandVideoPack(),
+      ...publicVideoPacks(),
+    ],
     fullCatalog: true,
   });
   const config = createBrowserViteConfig({

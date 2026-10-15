@@ -8,6 +8,8 @@ import { createLiveCameraFilter } from '../../server/providers/cctv/fullCatalog.
 import {
   dataTablesRowToSource,
   graphqlCameraToSource,
+  graphqlCameraToSources,
+  dataTablesRowToSources,
   loadCastleRock511Sources,
   parseWktPoint,
   pinnedHttpsUrl,
@@ -21,6 +23,39 @@ import {
 } from '../../server/providers/cctv/streamHealth.js';
 
 const site = (id) => CASTLE_ROCK_511_SITES.find((entry) => entry.id === id);
+
+test('all public 511 views survive with stable distinct IDs and the original first ID', () => {
+  const row = dataTablesRow();
+  const second = {
+    ...row.images[0],
+    videoUrl: 'https://cctv1.dot.wi.gov/rtplive/SECOND/playlist.m3u8',
+  };
+  row.images.push(second, second);
+  const cameras = dataTablesRowToSources(site('us-wi'), row);
+  assert.equal(cameras.length, 2);
+  assert.equal(cameras[0].id, 'us-wi-1');
+  assert.match(cameras[1].id, /^us-wi-1-view-/);
+  assert.equal(dataTablesRowToSources(site('us-wi'), row)[1].id, cameras[1].id);
+  const feature = {
+    __typename: 'Camera',
+    active: true,
+    uri: 'camera/123',
+    title: 'Road',
+    features: [{ geometry: { coordinates: [-93, 45] } }],
+    views: [
+      { sources: [{ src: 'https://video.dot.state.mn.us/one.m3u8' }] },
+      { sources: [{ src: 'https://video.dot.state.mn.us/two.m3u8' }] },
+    ],
+  };
+  const views = graphqlCameraToSources(site('us-mn'), feature);
+  assert.equal(views.length, 2);
+  assert.equal(views[0].id, 'us-mn-123');
+  assert.notEqual(views[0].id, views[1].id);
+  assert.deepEqual(
+    graphqlCameraToSources(site('us-mn'), { ...feature, active: false }),
+    [],
+  );
+});
 
 /** A /List/GetData/Cameras row carrying the fields the loader reads. */
 function dataTablesRow(overrides = {}, image = {}) {

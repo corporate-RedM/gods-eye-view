@@ -10,7 +10,7 @@ The upstream project documentation follows this section.
 The standalone app uses full-inventory mode:
 
 - [Standalone configuration](server/standalone/vite.config.js) passes
-  `fullCatalog: true` and `extraPacks: eyeCameraPacks()` to `createCctvCatalog`.
+  `fullCatalog: true` and native Osiris plus public-video packs to `createCctvCatalog`.
 - [Catalogue factory](server/providers/cctv/catalog.js) returns
   [the full catalogue implementation](server/providers/cctv/fullCatalog.js)
   before reaching the legacy `CCTV_MAX_SOURCES` cap. Native loaders receive
@@ -42,6 +42,17 @@ MJPEG plays continuously in the camera panel's IMG element; collapsing the panel
 switching cameras, hiding the tab or disposing the controls releases its stream.
 Measured counts, deleted files and playback limitations are recorded in
 [the camera catalogue change report](docs/CAMERA_CATALOGUE_CHANGE_REPORT.md).
+
+The public-video additions cover global OpenCCTV, Taiwan THB/freeways, public
+Florida/Georgia/North Carolina/Pennsylvania player flows, DriveTexas, Mississippi
+and Rhode Island. `CCTV_PUBLIC_VIDEO_ENABLED=0` disables these additional packs.
+IBI 511 and DriveTexas playback tokens are obtained on demand and kept only in
+active in-memory HLS sessions. Publisher adapters precede the global aggregator
+so deduplication retains the adapter capable of refreshing a feed's token.
+See [the WorldCam provider report](docs/WORLDCAM_PROVIDER_IMPORT.md) for rollout
+status, measured counts, actual-video checks and unresolved coverage. These
+additions do not imply that every WorldCam camera or every provider-listed feed
+has been verified.
 
 To verify the running instance, inspect
 [`/api/cctv/sources`](http://localhost:4173/api/cctv/sources): `sources.length`

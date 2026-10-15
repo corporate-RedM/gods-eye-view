@@ -12,6 +12,7 @@ import {
 import { knownDeadStreams } from './streamHealth.js';
 import { directionToHeading } from '../../../src/data/directionText.js';
 import { readResponseJsonCapped } from '../common/http.js';
+import { createHash } from 'node:crypto';
 
 /**
  * Live-video cameras from state "511" traveler sites on the Castle Rock
@@ -45,7 +46,7 @@ const GRAPHQL_CAMERAS_QUERY = `query MapFeatures($input: MapFeaturesArgs!) {
       features { geometry }
       ... on Camera {
         active
-        views(limit: 5) {
+        views(limit: 100) {
           category
           ... on CameraView { url sources { type src } }
         }
@@ -208,6 +209,39 @@ export function graphqlCameraToSource(site, feature) {
   return null;
 }
 
+/** Keep the original first-view identity and stable identities for other views. */
+function distinctViews(candidates) {
+  const views = [
+    ...new Map(
+      candidates.filter(Boolean).map((camera) => [camera.url, camera]),
+    ).values(),
+  ];
+  return views.map((camera, index) =>
+    index === 0
+      ? camera
+      : {
+          ...camera,
+          id: `${camera.id}-view-${createHash('sha256').update(camera.url).digest('hex').slice(0, 12)}`,
+        },
+  );
+}
+
+export function graphqlCameraToSources(site, feature) {
+  return distinctViews(
+    (feature?.views || []).map((view) =>
+      graphqlCameraToSource(site, { ...feature, views: [view] }),
+    ),
+  );
+}
+
+export function dataTablesRowToSources(site, row) {
+  return distinctViews(
+    (row?.images || []).map((image) =>
+      dataTablesRowToSource(site, { ...row, images: [image] }),
+    ),
+  );
+}
+
 async function fetchJson(url, init = {}) {
   const resp = await fetch(url, {
     ...init,
@@ -277,11 +311,11 @@ export async function loadCastleRock511Sources(
   try {
     const cameras =
       site.api === 'graphql'
-        ? (await fetchGraphqlFeatures(site)).map((feature) =>
-            graphqlCameraToSource(site, feature),
+        ? (await fetchGraphqlFeatures(site)).flatMap((feature) =>
+            graphqlCameraToSources(site, feature),
           )
-        : (await fetchDataTablesRows(site)).map((row) =>
-            dataTablesRowToSource(site, row),
+        : (await fetchDataTablesRows(site)).flatMap((row) =>
+            dataTablesRowToSources(site, row),
           );
     const unique = [
       ...new Map(
