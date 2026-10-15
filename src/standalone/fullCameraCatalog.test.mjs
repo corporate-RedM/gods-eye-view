@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   createFullCatalog,
   createLiveCameraFilter,
+  cameraFeedKey,
 } from '../../server/providers/cctv/fullCatalog.js';
 import {
   eyeCameraPacks,
@@ -13,6 +14,171 @@ import {
 } from '../../server/standalone/eye-cameras.js';
 import { osirisCameraRegions } from '../../integrations/osiris/app/api/cctv/route.js';
 import { cctvProxy } from '../../server/providers/cctv.js';
+
+test('image URLs cannot masquerade as video, while multipart MJPEG and unverified players stay', async () => {
+  const filter = createLiveCameraFilter();
+  const rows = [
+    {
+      id: 'mislabelled-embed',
+      feedType: 'iframe',
+      embedUrl: 'https://camera.test/frame.jpg?date=1',
+    },
+    {
+      id: 'mislabelled-hls',
+      feedType: 'hls',
+      url: 'https://camera.test/snapshot/camera',
+    },
+    {
+      id: 'static-opentopia',
+      feedType: 'mjpeg',
+      url: 'http://images.opentopia.com/cams/5276/big.jpg',
+    },
+    {
+      id: 'multipart',
+      feedType: 'mjpeg',
+      url: 'https://camera.test/video.jpg',
+    },
+    {
+      id: 'iframe',
+      feedType: 'iframe',
+      embedUrl: 'https://camera.test/player?id=1',
+    },
+  ];
+  assert.deepEqual(
+    (await filter(rows)).map((c) => c.id),
+    ['multipart', 'iframe'],
+  );
+});
+
+test('a known-dead feed cannot return under a normalized publisher alias', async () => {
+  const filter = createLiveCameraFilter({
+    getDeadStreams: async () =>
+      new Set(['https://video.deldot.gov/live/KCAM032.stream/playlist.m3u8']),
+  });
+  const rows = [
+    {
+      id: 'dead-alias',
+      feedType: 'hls',
+      url: 'http://video.deldot.gov:1935/live/KCAM032.stream/playlist.m3u8',
+    },
+    {
+      id: 'unverified',
+      feedType: 'hls',
+      url: 'https://video.deldot.gov/live/KCAM033.stream/playlist.m3u8',
+    },
+  ];
+  assert.deepEqual(
+    (await filter(rows)).map((c) => c.id),
+    ['unverified'],
+  );
+});
+
+test('feed identity preserves camera selectors and collapses known playback-only differences', () => {
+  const key = (url, feedType = 'hls') =>
+    cameraFeedKey({ url, embedUrl: url, feedType });
+  assert.equal(
+    key('https://s18.us-east-1.skyvdn.com/rtplive/40036/playlist_sfm4s.m3u8'),
+    key('https://s18.us-east-1.skyvdn.com/rtplive/40036/playlist.m3u8'),
+  );
+  assert.notEqual(
+    key('https://s18.us-east-1.skyvdn.com/rtplive/40036/playlist.m3u8'),
+    key('https://s18.us-east-1.skyvdn.com/rtplive/40037/playlist.m3u8'),
+  );
+  assert.equal(
+    key(
+      'https://www.youtube-nocookie.com/embed/video?modestbranding=1&iv_load_policy=3&si=share',
+      'iframe',
+    ),
+    key('https://www.youtube.com/embed/video', 'iframe'),
+  );
+  assert.equal(
+    key('http://video.deldot.gov:1935/live/KCAM032.stream/playlist.m3u8'),
+    key('https://video.deldot.gov/live/KCAM032.stream/playlist.m3u8'),
+  );
+  assert.notEqual(
+    key('http://other.test:1935/live/camera'),
+    key('https://other.test/live/camera'),
+  );
+  assert.equal(
+    key('https://camera.test/live?a=1&camera=2#x'),
+    key('https://camera.test/live?camera=2&a=1'),
+  );
+  assert.notEqual(
+    key('https://camera.test/live?camera=1'),
+    key('https://camera.test/live?camera=2'),
+  );
+  assert.notEqual(
+    key('https://camera.test/player#camera1', 'iframe'),
+    key('https://camera.test/player#camera2', 'iframe'),
+  );
+  assert.equal(
+    key('https://edge.skyvdn.com/live/a.m3u8?token=old'),
+    key('https://edge.skyvdn.com/live/a.m3u8?token=new'),
+  );
+  assert.notEqual(
+    key('https://other.test/live?token=1'),
+    key('https://other.test/live?token=2'),
+  );
+  assert.equal(
+    key('https://www.youtube-nocookie.com/embed/abc?autoplay=1', 'iframe'),
+    key('https://www.youtube.com/embed/abc?mute=1', 'iframe'),
+  );
+});
+
+test('all packs deduplicate playback endpoints despite coordinate drift, preserving separate views and stable aliases', async () => {
+  const camera = {
+    id: 'native',
+    lat: 43,
+    lon: -79,
+    feedType: 'hls',
+    url: 'https://camera.test/a.m3u8',
+    sourceKind: 'publisher',
+  };
+  const catalog = createFullCatalog({
+    sourceRoot: '.',
+    ttl: 900000,
+    packs: [
+      {
+        name: 'native',
+        enabled: () => true,
+        load: async () => [camera, { ...camera, id: 'native-copy', lat: 44 }],
+      },
+      {
+        name: 'another-publisher',
+        enabled: () => true,
+        load: async () => [
+          { ...camera, id: 'other-copy', lon: -80 },
+          { ...camera, id: 'separate-view', url: 'https://camera.test/b.m3u8' },
+        ],
+      },
+      {
+        name: 'osiris-global',
+        enabled: () => true,
+        load: async () => [{ ...camera, id: 'global-copy' }],
+      },
+    ],
+    normalize: (_pack, sources) => ({ sources }),
+    decorate: (sources) => sources,
+    filterSources: createLiveCameraFilter(),
+  });
+  const result = await catalog.ready();
+  assert.deepEqual(
+    result.map((c) => c.id),
+    ['native', 'separate-view'],
+  );
+  assert.deepEqual(result[0].aliases, [
+    'native-copy',
+    'other-copy',
+    'global-copy',
+  ]);
+  assert.equal(result[0].sourceKind, 'publisher');
+  assert.equal(catalog.coverage().deduplicated, 3);
+  assert.deepEqual(
+    await catalog.ready(),
+    result,
+    'refresh must not accumulate aliases',
+  );
+});
 
 test('live admission retains unverified video and excludes stills and website-only links', async () => {
   const filter = createLiveCameraFilter();

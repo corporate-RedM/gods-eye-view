@@ -65,13 +65,28 @@ async function json(fetchImpl, url, init = {}) {
   });
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error(`Camera provider HTTP ${response.status}`);
+    const error = new Error(`Camera provider HTTP ${response.status}`);
+    error.permanent =
+      response.status >= 400 &&
+      response.status < 500 &&
+      response.status !== 429;
+    error.retryMs = Math.min(
+      30000,
+      Math.max(
+        1000,
+        Number(response.headers.get('retry-after')) * 1000 || 1000,
+      ),
+    );
+    throw error;
   }
   return response.json();
 }
 
 /** Hydrate every video candidate, in the provider's documented 50-record batches. */
-export async function loadGlobalPublicVideo({ fetchImpl = fetch } = {}) {
+export async function loadGlobalPublicVideo({
+  fetchImpl = fetch,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
   const headers = {
     Accept: 'application/json',
     Referer: 'https://opencctv.org/',
@@ -89,11 +104,20 @@ export async function loadGlobalPublicVideo({ fetchImpl = fetch } = {}) {
       while (next < ids.length) {
         const batch = ids.slice(next, (next += 50));
         try {
-          const rows = await json(fetchImpl, BATCH, {
-            method: 'POST',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: batch }),
-          });
+          let rows;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+              rows = await json(fetchImpl, BATCH, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: batch }),
+              });
+              break;
+            } catch (error) {
+              if (attempt === 3 || error.permanent) throw error;
+              await sleep(error.retryMs || 1000 * 2 ** attempt);
+            }
+          }
           if (!Array.isArray(rows)) throw new Error('Invalid camera batch');
           const requested = new Set(batch);
           for (const record of rows) {

@@ -27,8 +27,13 @@ The standalone catalogue is video-only: provider-listed HLS, MJPEG, MP4/WebM
 and embedded players are retained. Still-image records and website-only operator
 links and streams already recorded as dead are filtered out on the server.
 Unverified feeds remain, including periodically refreshed clips and embedded
-players. Counts do not prove working playback. Exact shared
-video feeds are deduplicated with alias IDs retained.
+players. Counts do not prove working playback. Shared video endpoints are
+deduplicated across every pack, even when coordinates differ, with alias IDs
+retained. Camera-selecting URL parameters remain distinct; known DelDOT legacy
+URLs, South Carolina playlist variants, YouTube presentation options and DriveTexas signatures are normalized only
+for comparison. Playback URLs are unchanged. Different views at the same location
+remain separate. Direct still-image endpoints mislabeled as video are excluded;
+multipart MJPEG is retained.
 Caltrans, DelDOT and state-511 loaders retain their existing dead-stream checks.
 The merged catalogue also reads saved dead verdicts so aliases from other packs
 cannot reintroduce those URLs. This adds no new probes or verification requirement.

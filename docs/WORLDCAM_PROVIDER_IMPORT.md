@@ -2,10 +2,11 @@
 
 ## Delivery status
 
-Prepared and tested in a separate checkout at `/tmp/childs-eye-worldcam`, based
-on Child's Eye `d3de4be`. **Not applied to the running app or the childs_eye branch.**
-Applying these server files restarts Vite. Port 4173 has not been restarted.
-AI Watch was checked and is off.
+Provider commit `416f040` was applied to `childs_eye` in
+`/home/bk/gods-eye-view` on 2026-10-15, after BK explicitly approved installation
+and a restart of port 4173. AI Watch was checked and was off before server edits.
+The original isolated checkout at `/tmp/childs-eye-worldcam` is no longer the
+only location of these changes. No push was performed.
 
 This is a substantial but **incomplete** WorldCam import. Do not describe it as
 “all WorldCam cameras added,” or describe the counts below as verified-working
@@ -221,8 +222,161 @@ Failed/unverified samples:
 - Samples do not verify entire providers. Embedded players and MP4 candidates
   were not individually reviewed during this addition.
 
-**Real-app installation, GUI counts and panel playback remain pending permission
-to restart port 4173.** Do not report that the running app has these additions yet.
+## Installation audit and duplicate corrections
+
+The first actual updated server collection contained 40,332 video candidates.
+A headless browser at `http://127.0.0.1:4173` displayed progressively increasing
+frame counts, then `camera grid ready — 40,332 / 40,332 cameras`; both the
+dropdown and search datalist contained 40,332 options. This was the real server,
+without a fixture catalogue. Further audit corrections below required a second
+collection; the final measurement is recorded separately.
+
+The old duplicate rule applied only to incoming Osiris records at matching
+rounded coordinates. It could leave duplicate native feeds and feeds with
+slightly different coordinates. The new rule uses playback identity across all
+packs, preserves the first pack's stable ID and playback adapter, and records
+removed IDs as aliases. Names and proximity alone never remove a camera.
+DelDOT's HTTP port 1935 and HTTPS URLs for the same named stream, South
+Carolina's `playlist_sfm4s.m3u8` / `playlist.m3u8` variants, DriveTexas
+expiring signatures and YouTube presentation parameters are normalized for
+comparison. Camera selectors and separate viewing directions stay distinct.
+The same normalization applies to recorded-dead verdicts.
+
+An independent in-memory provider audit found 32 direct image URLs mislabeled
+as video in its first sample. Examples returned `Content-Type: image/jpeg`,
+including an OpenTopia `big.jpg` mislabeled as MJPEG and a Japanese MLIT JPEG
+mislabeled as an iframe. The server now excludes direct still endpoints even
+when their declared type says video. Genuine multipart MJPEG remains supported,
+including image-like paths outside the confirmed static OpenTopia service.
+
+The first global-provider request also failed 202 of 505 batches. Bounded
+retries now honor numeric `Retry-After` responses for temporary errors; access
+refusals such as HTTP 403 are not retried. Partial coverage remains reported
+honestly, and no inventory is written to disk.
+
+The next in-memory collection completed every new provider and found 46,354
+candidates after initial duplicate removal. Examining alternate URL patterns
+found a further 818 repeated listings: 767 South Carolina playlist variants and
+51 YouTube player-option variants. Applying the final comparison rules to that
+same in-memory sample produced 45,536 unique playback identities. No direct
+snapshot URLs remained in that sample. This is an independent provider audit,
+not the final running-server count; providers and health verdicts can change.
+
+Final-code validation: `PATH=/home/bk/.nvm/versions/node/v24.21.0/bin:$PATH npm test`
+completed successfully: **6,499 passed, one skipped, zero failures** (6,485 main
+tests plus 14 allocation tests). Formatting checks for the four changed code/test
+files and `git diff --check` passed.
+
+Installed-server playback samples used `/api/cctv/media/` on port 4173:
+
+- Florida `osiris-ibi-video-fl:1:1`: two HLS frames five seconds apart showed
+  vehicles moving; both frames were visually inspected.
+- Taiwan freeway camera `CCTV-N1-S-0.000-M`, retained under alias winner
+  `osiris-eastasia-occ-twipcam-n1-s-0k-000`: the proxy returned multipart MJPEG.
+  Two JPEGs from the same continuous response, 5.191 seconds apart, showed
+  vehicles moving. Both frames were visually inspected. An earlier ffmpeg
+  sampling attempt produced only one frame; the continuous-response check
+  supplied the successful pair.
+- Texas `TX_ELP_007`: the installed proxy returned a 5xx error during this
+  sample. No moving frames were confirmed in that run; it remains unverified.
+
+Evidence frames are under `/tmp/childs-eye-installed-evidence/`; these are
+images, not saved camera lists. No inventory file was created or deleted.
+Existing health and terrain caches were left to their normal application use.
+
+Limitations: matching names and locations with different stream/channel IDs
+were retained as possible separate views. Six Quebec MP4 endpoints in three
+such pairs returned HTTP 403 to header checks, so their video equivalence could
+not be established. No claim is made that every distinct URL shows a different
+physical camera, or that every retained unverified video currently plays.
+
+An additional read-only check sent the 818 identified duplicate groups to the
+actual running server's catalogue in memory. All 818 resolved to exactly one
+retained camera through IDs/aliases; none were absent and **zero duplicate
+groups remained**. The app contained 45,676 records at that measurement during
+its normal provider refresh. This checks the installed catalogue, not a fixture.
+
+## Final installed catalogue measurement
+
+At 2026-10-15T22:51:17.704Z, the real server at port 4173 had completed collection
+(`loading: false`) and served **45,709 cameras**, compared with
+13,719 before installation. Counts change with provider refreshes and recorded
+health. The server collapsed **13,665 repeated provider records**.
+The API contained zero duplicate IDs, zero duplicate normalized iframe URLs,
+zero direct still-image embeds, and zero snapshot/external feed-type records.
+The global provider completed all 505 batches with **zero failed batches**.
+Existing Osiris US-central and Turkey returned no usable records; all new
+provider packs completed.
+
+The final real-app browser run showed `camera grid ready — 45,709 / 45,709`
+and completed both **45,709 dropdown options and 45,709 search suggestions**.
+Evidence: `/tmp/childs-eye-installed-catalogue.png`. No fixture camera data was
+used. The earlier 120-second UI check timed out while the off-DOM list was still
+building; the extended headless run completed. The software-rendered browser was
+also inspected with DevTools during that run, so this is a functional check,
+not a measurement of normal desktop loading speed.
+
+| Feed type | Before | After |
+| --- | ---: | ---: |
+| HLS | 9798 | 33866 |
+| Embedded player | 914 | 5131 |
+| MP4 | 1654 | 2543 |
+| MJPEG | 1353 | 4169 |
+| **Total** | **13719** | **45709** |
+
+The full `/api/cctv/sources` response was **25,601,143 bytes**
+uncompressed. The earlier 13,720-camera baseline capture was 7,444,497 bytes;
+that size was not remeasured at exactly 13,719. Count-only polling now transfers
+**124 bytes** in this capture, not the full list.
+
+Counts below are retained primary records per pack, after merging; a decrease
+can mean the same feed is represented under another pack's primary ID.
+
+| Provider pack | Before | After |
+| --- | ---: | ---: |
+| caltrans | 1189 | 1170 |
+| deldot | 357 | 347 |
+| wisconsin511 | 426 | 448 |
+| louisiana511 | 320 | 477 |
+| nevada511 | 599 | 601 |
+| minnesota511 | 1057 | 1060 |
+| iowa511 | 654 | 654 |
+| vegvesen | 132 | 133 |
+| osiris-middle-east | 4 | 4 |
+| osiris-canada | 680 | 680 |
+| osiris-bulgaria | 1 | 1 |
+| osiris-greece | 2 | 2 |
+| osiris-serbia | 1 | 1 |
+| osiris-macedonia | 2 | 2 |
+| osiris-italy | 974 | 973 |
+| osiris-czechia | 3 | 3 |
+| osiris-slovakia | 2 | 2 |
+| osiris-germany | 2 | 2 |
+| osiris-france | 4 | 4 |
+| osiris-spain | 3 | 3 |
+| osiris-poland | 73 | 73 |
+| osiris-japan | 18 | 18 |
+| osiris-sweden | 47 | 46 |
+| osiris-taiwan | 4 | 4 |
+| osiris-thailand | 6 | 6 |
+| osiris-edmonton | 58 | 58 |
+| osiris-indiana | 710 | 708 |
+| osiris-florida | 28 | 29 |
+| osiris-northcarolina | 25 | 25 |
+| osiris-eastasia | 4422 | 4398 |
+| osiris-seasia | 1122 | 1108 |
+| osiris-westasia | 783 | 780 |
+| osiris-public-webcams-nl | 11 | 11 |
+| osiris-ibi-video-fl | 0 | 4412 |
+| osiris-ibi-video-ga | 0 | 4331 |
+| osiris-ibi-video-nc | 0 | 984 |
+| osiris-ibi-video-pa | 0 | 1359 |
+| osiris-drivetexas-video | 0 | 3528 |
+| osiris-mississippi-video | 0 | 932 |
+| osiris-ridot-video | 0 | 130 |
+| osiris-global-video | 0 | 13392 |
+| osiris-taiwan-video | 0 | 2214 |
+| osiris-taiwan-freeway-video | 0 | 596 |
 
 ## NSTAR license
 
@@ -241,4 +395,3 @@ purpose. No message was sent and no purchase was made.
 Exact current prices were not verified. Automatic approval review rejected
 reading a tokenized checkout session as private-session access; that URL was not
 read or retried. Public plan details above were checked on 2026-10-15.
-

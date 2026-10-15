@@ -5,17 +5,105 @@ export function createLiveCameraFilter({
   getDeadStreams = async () => new Set(),
 } = {}) {
   let dead = new Set();
+  let deadFeeds = new Set();
   const include = (camera) =>
     (['hls', 'mjpeg', 'mp4', 'webm'].includes(camera.feedType) ||
       (camera.feedType === 'iframe' && !!camera.embedUrl)) &&
-    !dead.has(camera.feedType === 'iframe' ? camera.embedUrl : camera.url);
+    !isSnapshotEndpoint(camera) &&
+    !dead.has(camera.feedType === 'iframe' ? camera.embedUrl : camera.url) &&
+    !deadFeeds.has(cameraFeedKey(camera));
   const filter = async (sources) => {
     dead = await getDeadStreams();
+    deadFeeds = new Set(
+      [...dead]
+        .flatMap((url) => [
+          cameraFeedKey({ feedType: 'hls', url }),
+          cameraFeedKey({ feedType: 'iframe', embedUrl: url }),
+        ])
+        .filter(Boolean),
+    );
     return sources.filter(include);
   };
   filter.include = include;
   filter.liveOnly = true;
   return filter;
+}
+
+// A provider's video label must not turn a direct image into a live feed.
+// Multipart MJPEG endpoints can have image-like paths: keep those unless the
+// URL is a known static thumbnail service confirmed by its HTTP content type.
+export function isSnapshotEndpoint(camera) {
+  const value = camera.feedType === 'iframe' ? camera.embedUrl : camera.url;
+  try {
+    const url = new URL(value);
+    if (camera.feedType === 'mjpeg')
+      return (
+        url.hostname === 'images.opentopia.com' &&
+        /\.jpe?g$/i.test(url.pathname)
+      );
+    return (
+      /\.(?:jpe?g|png|gif|webp)$/i.test(url.pathname) ||
+      /\/(?:snapshot|thumbnail)(?:\/|$)/i.test(url.pathname) ||
+      ['action', 'mode', 'type'].some(
+        (key) => url.searchParams.get(key) === 'snapshot',
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Stable playback identity, independent of provider coordinates and labels.
+ * Keep camera-selecting query parameters. Only known player presentation flags
+ * and DriveTexas's expiring signature are ignored; playback URLs stay intact.
+ */
+export function cameraFeedKey(camera) {
+  const value = camera.feedType === 'iframe' ? camera.embedUrl : camera.url;
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (camera.feedType !== 'iframe') url.hash = '';
+    // DelDOT publishes the same named stream through its old HTTP:1935 and
+    // current HTTPS frontends. These are one camera, not separate directions.
+    if (
+      url.hostname === 'video.deldot.gov' &&
+      /^\/live\/[^/]+\.stream\//.test(url.pathname)
+    ) {
+      url.protocol = 'https:';
+      url.port = '';
+    }
+    if (url.hostname.endsWith('.skyvdn.com')) {
+      url.searchParams.delete('token');
+      // South Carolina publishes TS and fMP4 playlists for the same camera.
+      url.pathname = url.pathname.replace(
+        /^(\/rtplive\/[^/]+\/)playlist_sfm4s\.m3u8$/,
+        '$1playlist.m3u8',
+      );
+    }
+    if (
+      camera.feedType === 'iframe' &&
+      /^(www\.)?(youtube\.com|youtube-nocookie\.com)$/.test(url.hostname)
+    ) {
+      url.hostname = 'www.youtube.com';
+      for (const flag of [
+        'autoplay',
+        'mute',
+        'controls',
+        'rel',
+        'playsinline',
+        'enablejsapi',
+        'origin',
+        'modestbranding',
+        'iv_load_policy',
+        'si',
+      ])
+        url.searchParams.delete(flag);
+    }
+    url.searchParams.sort();
+    return url.href;
+  } catch {
+    return String(value);
+  }
 }
 
 /** Full inventories: bounded concurrent downloads, never bounded camera counts. */
@@ -49,8 +137,9 @@ export function createFullCatalog({
     revision = 0;
   const rebuild = () => {
     const ids = new Map();
-    // Keep native stable IDs. Collapse exact shared feed URLs only at the same
-    // coordinates; nearby cameras and different viewing directions remain separate.
+    // First pack wins: preserve native IDs and publisher playback resolvers.
+    // A shared playback endpoint is one feed even if coordinates disagree.
+    // Different endpoints at the same position remain separate views.
     const feeds = new Map();
     for (const pack of packs) {
       const state = states.get(pack.name);
@@ -58,29 +147,16 @@ export function createFullCatalog({
       if (filterSources.include)
         state.sources = state.sources.filter(filterSources.include);
       for (const camera of state.sources) {
-        const urls = (
-          filterSources.liveOnly
-            ? [camera.feedType === 'iframe' ? camera.embedUrl : camera.url]
-            : [camera.url, camera.snapshotUrl, camera.externalUrl]
-        ).filter(Boolean);
-        const keys = urls.map(
-          (url) =>
-            `${Number(camera.lat).toFixed(4)},${Number(camera.lon).toFixed(4)}:${url}`,
-        );
-        const duplicate = keys.map((key) => feeds.get(key)).find(Boolean);
-        if (
-          duplicate &&
-          pack.name.startsWith('osiris-') &&
-          duplicate !== camera.id
-        ) {
-          const winner = ids.get(duplicate);
-          if (winner) {
+        const key = cameraFeedKey(camera);
+        const winner = ids.get(camera.id) || (key && feeds.get(key));
+        if (winner) {
+          if (winner.id !== camera.id && !winner.aliases.includes(camera.id))
             winner.aliases.push(camera.id);
-            continue;
-          }
+          continue;
         }
-        ids.set(camera.id, { ...camera, aliases: [] });
-        for (const key of keys) feeds.set(key, camera.id);
+        const entry = { ...camera, aliases: [] };
+        ids.set(camera.id, entry);
+        if (key) feeds.set(key, entry);
       }
     }
     merged = decorate([...ids.values()]);

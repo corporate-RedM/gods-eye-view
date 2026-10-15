@@ -67,6 +67,7 @@ test('global video hydration exceeds 256 and never sends more than 50 IDs', asyn
 test('partial provider batches are reported instead of claiming a complete inventory', async () => {
   const ids = Array.from({ length: 101 }, (_, i) => `c-${i}`);
   const rows = await loadGlobalPublicVideo({
+    sleep: async () => {},
     fetchImpl: async (url, init) => {
       if (url.endsWith('/markers'))
         return response({ ids, fts: ids.map(() => 2) });
@@ -81,6 +82,45 @@ test('partial provider batches are reported instead of claiming a complete inven
   assert.equal(rows.length, 51);
   assert.equal(rows.inventory.failedBatches, 1);
   assert.equal(rows.inventory.partial, true);
+});
+
+test('transient global batch errors retry with Retry-After and do not lose cameras', async () => {
+  let attempts = 0;
+  const waits = [];
+  const rows = await loadGlobalPublicVideo({
+    sleep: async (ms) => waits.push(ms),
+    fetchImpl: async (url) => {
+      if (url.endsWith('/markers'))
+        return response({ ids: ['camera'], fts: [2] });
+      if (++attempts === 1)
+        return new Response('', {
+          status: 429,
+          headers: { 'Retry-After': '2' },
+        });
+      return response([record('camera')]);
+    },
+  });
+  assert.equal(attempts, 2);
+  assert.deepEqual(waits, [2000]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows.inventory.failedBatches, 0);
+});
+
+test('global provider access refusals are not retried', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    loadGlobalPublicVideo({
+      sleep: async () => assert.fail('must not retry access refusals'),
+      fetchImpl: async (url) => {
+        if (url.endsWith('/markers'))
+          return response({ ids: ['camera'], fts: [2] });
+        attempts++;
+        return new Response('', { status: 403 });
+      },
+    }),
+    /Every OpenCCTV/,
+  );
+  assert.equal(attempts, 1);
 });
 
 test('reject stills, external links, inactive cameras and malformed video metadata', () => {
