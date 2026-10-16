@@ -66,8 +66,13 @@ be empty, and `coverage.packs` reports provider state. `coverage.loading: true`
 can indicate a background refresh while an in-memory catalogue is available.
 Use these fields rather than an old `.env` value or a test-suite count as evidence.
 
-Performance budgets do **not** trim the inventory: the CCTV dropdown renders up
-to 250 suggestions plus the current selection while searching all records;
+Performance budgets do **not** trim the inventory: the CCTV dropdown and search
+share a virtual scrollable list containing every camera, with no result cap.
+Only the visible rows occupy DOM nodes; scrolling reaches the entire catalogue.
+Camera names and locality labels use the shared English display formatter in
+`src/data/englishNames.js` and `englishCameraLabels.js`. Original names remain
+searchable aliases; translations never change IDs, URLs or catalogue membership.
+Separately,
 terrain refinement prioritizes 256 nearby cameras and the selected camera.
 The on-screen **Loading camera catalogue** counter reports actual records
 registered in the browser against the server's filtered video catalogue total.

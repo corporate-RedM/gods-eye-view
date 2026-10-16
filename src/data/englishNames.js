@@ -20,6 +20,11 @@
  * @module data/englishNames
  */
 
+import {
+  englishAsianCameraName,
+  englishLocality,
+} from './englishCameraLabels.js';
+
 /** Packs whose camera names are Estonian, Finnish or German, by cityId. */
 const ESTONIAN = /^(tallinn|estonia)$/;
 const FINNISH = /^finland$/;
@@ -240,7 +245,7 @@ export function englishCameraName(name, cityId = '') {
   if (ESTONIAN.test(pack)) return englishEstonian(text);
   if (FINNISH.test(pack)) return englishFinnish(text);
   if (GERMAN.test(pack)) return englishGerman(text);
-  return text;
+  return englishAsianCameraName(text);
 }
 
 /** Same limit as the server's CAMERA_CODE_MAX_CHARS. */
@@ -294,7 +299,7 @@ export function englishPlaceName(name) {
     if (text.startsWith(`${local} `) || text.startsWith(`${local},`))
       return english + text.slice(local.length);
   }
-  return text;
+  return englishLocality(text);
 }
 
 /**

@@ -29,7 +29,7 @@ function element() {
   };
 }
 
-test('camera search and picker retain the complete catalogue across typed labels and state updates', (t) => {
+test('camera search fallback retains the complete catalogue and finds duplicate names by ID', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const select = {
     options: [],
@@ -74,24 +74,29 @@ test('camera search and picker retain the complete catalogue across typed labels
   cameras[1398].name = cameras[1399].name;
   const state = { enabled: true, count: cameras.length, cameras };
   controls._renderCctvState(state);
-  assert.equal(select.options.length, 128);
-  assert.equal(select.disabled, true);
+  assert.equal(select.options.length, 1400);
+  assert.equal(select.disabled, false);
   for (let i = 0; i < 20; i++) t.mock.timers.tick(1);
   assert.equal(select.options.length, 1400);
   assert.equal(select.disabled, false);
   assert.equal(suggestions.options.length, 1400);
-  assert.equal(controls._cctvSearchIds.size, 1400);
-  const label = suggestions.options[1399].value;
+  search.value = 'camera-1399';
+  controls._cctvListSignature = null;
+  controls._renderCctvState(state);
+  assert.equal(suggestions.options.length, 1);
+  const label = suggestions.options[0].value;
   assert.equal(controls._cctvSearchIds.get(label), 'camera-1399');
-  assert.match(suggestions.options[1399].label, /camera-1399/);
+  assert.match(suggestions.options[0].label, /camera-1399/);
   search.value = label;
   controls._renderCctvState({ ...state, activeCameraId: 'camera-0' });
   assert.equal(controls._cctvSearchIds.get(search.value), 'camera-1399');
-  assert.equal(select.options.length, 1400);
+  assert.equal(select.options.length, 2);
   search.value = 'Road';
   controls._renderCctvState(state);
   assert.equal(suggestions.options.length, 1400);
   search.value = '';
+  controls._renderCctvState(state);
+  controls._cctvListSignature = null;
   controls._renderCctvState(state);
   assert.equal(suggestions.options.length, 1400);
   controls._renderCctvState({ ...state, cameras: cameras.slice(0, -1) });
@@ -539,7 +544,7 @@ test('the feed filter lists only live video or only snapshot cameras', (t) => {
   );
   assert.equal(
     select.options[0].textContent,
-    'Los Angeles · I-110 at 1st St · LIVE',
+    'Los Angeles · I-110 at 1st St · VIDEO',
   );
 
   filter.value = 'live';
@@ -550,8 +555,8 @@ test('the feed filter lists only live video or only snapshot cameras', (t) => {
     'the dropdown lists live cameras only, even while a snapshot is active',
   );
   assert.deepEqual(suggested(), [
-    'Los Angeles · I-110 at 1st St · LIVE',
-    'Wilmington · King St at 10th · LIVE',
+    'Los Angeles · I-110 at 1st St · VIDEO · live-1',
+    'Wilmington · King St at 10th · VIDEO · live-2',
   ]);
   assert.equal(
     select.selectedIndex,
@@ -562,7 +567,7 @@ test('the feed filter lists only live video or only snapshot cameras', (t) => {
   filter.value = 'snapshot';
   controls._renderCctvState({ ...state, activeCameraId: null });
   assert.deepEqual(listed(), ['snap-1']);
-  assert.deepEqual(suggested(), ['Austin · Congress at 5th']);
+  assert.deepEqual(suggested(), ['Austin · Congress at 5th · snap-1']);
   assert.deepEqual(
     filter.options.map((option) => option.textContent),
     ['All feeds (3)', 'Live video (2)', 'Snapshots (1)'],
@@ -719,7 +724,7 @@ test('a live stream that failed is labelled LIVE OFFLINE in the list and the bad
   });
   assert.equal(
     select.options[0].textContent,
-    'Los Angeles · I-110 at 1st St · LIVE OFFLINE',
+    'Los Angeles · I-110 at 1st St · UNAVAILABLE',
   );
   assert.equal(badge.textContent, 'LIVE · OFFLINE · STILL IMAGE');
   assert.equal(badge.dataset.frameState, 'offline');

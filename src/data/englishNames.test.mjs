@@ -7,6 +7,76 @@ import {
   englishPlaceName,
   englishProviderName,
 } from './englishNames.js';
+import { filterCameraPickerRows } from '../ui/cctvCataloguePicker.js';
+
+test('Taiwan road labels preserve route suffixes, distance, direction and landmarks in English', () => {
+  const cases = [
+    ['國道10號 W 33K+590', 'National Freeway 10 westbound 33 km + 590'],
+    ['台74線10K+970', 'Provincial Highway 74 10 km + 970'],
+    ['台2戊006K+900', 'Provincial Highway 2E 006 km + 900'],
+    ['台14甲線31K+500武嶺', 'Provincial Highway 14A 31 km + 500 Wuling'],
+    [
+      '台9線125K+412順樁(S)',
+      'Provincial Highway 9 125 km + 412 toward increasing kilometer markers (southbound)',
+    ],
+    [
+      '台9線128K+342逆樁(N)',
+      'Provincial Highway 9 128 km + 342 toward decreasing kilometer markers (northbound)',
+    ],
+    [
+      '台20臨105線0K+036',
+      'Provincial Highway 20, Temporary Route 105 0 km + 036',
+    ],
+    ['中118線004K+700', 'Taichung Route 118 004 km + 700'],
+    ['144線1K+150西', 'County Highway 144 1 km + 150 westbound'],
+    ['高港高架 E 0K+000', 'Kaohsiung Port Elevated Road eastbound 0 km + 000'],
+  ];
+  for (const [original, expected] of cases)
+    assert.equal(englishCameraName(original), expected);
+});
+
+test('multilingual camera names and locality details use English without guessing a different location', () => {
+  assert.equal(englishCameraName('대신방향(160M)'), 'Toward Daesin (160 m)');
+  assert.equal(
+    englishCameraName('黃金海岸，台南市南區 (HD)'),
+    'Gold Coast, South District, Tainan (HD)',
+  );
+  assert.equal(englishPlaceName('Geoje (고현동)'), 'Geoje (Gohyeon-dong)');
+  assert.equal(
+    englishPlaceName('釧路海上保安部'),
+    'Kushiro Coast Guard Office',
+  );
+  assert.equal(
+    englishPlaceName('大阪海上保安監部'),
+    'Osaka Coast Guard Office',
+  );
+  assert.equal(englishPlaceName('Междуреченск'), 'Mezhdurechensk');
+  assert.equal(englishPlaceName('台東区'), 'Taito');
+  assert.equal(englishPlaceName('頭城鎮'), 'Toucheng Township');
+  assert.equal(englishPlaceName('บ้านเฉวง'), 'Ban Chaweng');
+  assert.equal(englishPlaceName('Unknown locality'), 'Unknown locality');
+});
+
+test('translated cameras remain searchable by both English and original names and places', () => {
+  const camera = {
+    id: 'road-1',
+    name: 'National Freeway 1',
+    originalName: '國道1號',
+    city: 'Toucheng Township',
+    originalCity: '頭城鎮',
+    provider: 'Taiwan Freeway Bureau',
+  };
+  for (const query of [
+    'National Freeway',
+    '國道1號',
+    'Toucheng',
+    '頭城鎮',
+    'Taiwan road-1',
+  ]) {
+    assert.deepEqual(filterCameraPickerRows([camera], query), [camera]);
+  }
+  assert.deepEqual(filterCameraPickerRows([camera], 'unrelated'), []);
+});
 
 test('translated cameras get an English label code by the server rule', () => {
   assert.equal(
@@ -117,7 +187,10 @@ test('English-language packs pass through untouched', () => {
 test('places and operators with an English name get it', () => {
   assert.equal(englishPlaceName('Montréal'), 'Montreal');
   assert.equal(englishPlaceName('Québec'), 'Quebec City');
-  assert.equal(englishPlaceName('Montréal (Ville-Marie)'), 'Montreal (Ville-Marie)');
+  assert.equal(
+    englishPlaceName('Montréal (Ville-Marie)'),
+    'Montreal (Ville-Marie)',
+  );
   assert.equal(englishPlaceName('Pärnu'), 'Pärnu');
   assert.equal(englishPlaceName('Tallinn, Estonia'), 'Tallinn, Estonia');
   assert.equal(englishProviderName('Stadt Warendorf'), 'City of Warendorf');

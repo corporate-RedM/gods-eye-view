@@ -160,6 +160,65 @@
   outline: none;
 }
 
+.cctv-catalogue-picker {
+  position: fixed;
+  z-index: 10000;
+  padding: 4px;
+  color: #eaf5fa;
+  background: #10212c;
+  border: 1px solid #527486;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px #0009;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+.cctv-catalogue-picker[hidden] {
+  display: none;
+}
+.cctv-catalogue-picker-count {
+  padding: 8px 10px;
+  color: #b8cfda;
+}
+.cctv-catalogue-picker-viewport {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: 320px;
+}
+.cctv-catalogue-picker-space {
+  position: relative;
+}
+.cctv-catalogue-picker-row {
+  position: absolute;
+  box-sizing: border-box;
+  height: 68px;
+  left: 0;
+  right: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ffffff16;
+  cursor: pointer;
+}
+.cctv-catalogue-picker-row:hover,
+.cctv-catalogue-picker-row[aria-selected='true'] {
+  background: #294556;
+}
+.cctv-catalogue-picker-row strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 17px;
+}
+.cctv-catalogue-picker-row span {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  color: #b8cfda;
+  font-size: 12px;
+}
+
 #cctv-camera-search {
   flex: 1;
   min-width: 0;

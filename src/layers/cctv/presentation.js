@@ -75,6 +75,8 @@ export function createPresentation({
     return {
       id: camera.id,
       name: camera.name,
+      originalName: camera.originalName,
+      originalCity: camera.originalCity,
       city: cameraPlace(camera),
       provider: camera.provider,
       lat: camera.lat,

@@ -142,9 +142,17 @@ export function _initCctvPanel() {
     );
   });
 
+  this.listen(this._cctvSearch, 'input', () => {
+    if (this._cctvPicker) return;
+    if (this._cctvSearchIds?.has(this._cctvSearch.value.trim())) return;
+    this._cctvListSignature = null;
+    this._renderCctvState(this._cctvState);
+  });
+
   // Picking a search suggestion (or pressing Enter on an exact label) selects
   // that camera through the dropdown's own change path, then clears the box.
   this.listen(this._cctvSearch, 'change', () => {
+    if (this._cctvPicker) return;
     const cameraId = this._cctvSearchIds?.get(this._cctvSearch.value.trim());
     if (!cameraId || !this._cctvSelect) return;
     this._cctvSelect.value = cameraId;

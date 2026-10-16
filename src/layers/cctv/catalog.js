@@ -175,12 +175,14 @@ export function createCatalog({ state: layerState, services, parts, source }) {
         source.poseSource === 'curated' ? 'curated' : seed?.poseSource || null;
 
       // Upstream names stay in the server catalog; the app shows them in
-      // English (Estonian, Finnish and German packs are translated).
+      // English. Preserve the upstream name as a searchable alias.
       const upstreamName = String(source.name || seed?.name || id);
       const name = englishCameraName(upstreamName, cityId);
       const camera = {
         id,
         name,
+        originalName: upstreamName,
+        originalCity: String(source.city || city?.name || seed?.city || ''),
         cityId,
         city: englishPlaceName(
           String(source.city || city?.name || seed?.city || 'Global'),

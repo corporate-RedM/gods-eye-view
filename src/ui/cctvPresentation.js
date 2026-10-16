@@ -93,7 +93,7 @@ export function _renderCctvState(state) {
     // isVideo and liveFailed are part of the signature: a stream that falls
     // back to its still image moves the camera from Live video to Snapshots,
     // labelled LIVE OFFLINE.
-    const signature = `${feedFilter}|${listed
+    const signature = `${feedFilter}|${activeId}|${listed
       .map((cam) =>
         cam.isVideo ? `${cam.id}+` : cam.liveFailed ? `${cam.id}!` : cam.id,
       )
@@ -113,6 +113,9 @@ export function _renderCctvState(state) {
         }
       }
       this._cctvSelect.innerHTML = '';
+      this._cctvSearchMatch = this._cctvSearchIds?.get(
+        this._cctvSearch?.value?.trim(),
+      );
       // The search box suggests these same labels; duplicate labels get the
       // camera id appended so every suggestion resolves to exactly one camera.
       this._cctvSearchIds = new Map();
@@ -122,6 +125,7 @@ export function _renderCctvState(state) {
     this._cctvSelect.disabled =
       !enabled || cameras.length === 0 || !!this._cctvListPending;
     if (this._cctvSearch) this._cctvSearch.disabled = this._cctvSelect.disabled;
+    if (this._cctvSelect.disabled) this._cctvPicker?.close();
     if (this._cctvFeedFilter)
       this._cctvFeedFilter.disabled = this._cctvSelect.disabled;
     if (
