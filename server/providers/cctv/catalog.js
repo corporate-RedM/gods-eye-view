@@ -14,7 +14,7 @@ import {
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
 import { labelPackCities } from './places.js';
 import { createFullCatalog, createLiveCameraFilter } from './fullCatalog.js';
-import { getRecordedDeadStreams } from './streamHealth.js';
+import { getRecordedDeadStreams, checkCameraStreams } from './streamHealth.js';
 import { cameraRegion, normalizeSourceItem } from './normalize.js';
 import {
   loadAustinSourcesFromOpenData,
@@ -172,6 +172,8 @@ export function createCctvCatalog({
       sourceRoot,
       filterSources: createLiveCameraFilter({
         getDeadStreams: getRecordedDeadStreams,
+        retainUnavailable: true,
+        checkStreams: checkCameraStreams,
       }),
       packs: [
         ...livePacks,

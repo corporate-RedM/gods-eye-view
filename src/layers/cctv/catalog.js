@@ -196,6 +196,7 @@ export function createCatalog({ state: layerState, services, parts, source }) {
             (source.url ? 'configured' : 'seed'),
         ).toLowerCase(),
         feedType,
+        playback: source.playback || { status: 'unchecked' },
         externalUrl: source.externalUrl || '',
         embedUrl: source.embedUrl || '',
         feedConfigured: typeof source.url === 'string' && !!source.url.trim(),

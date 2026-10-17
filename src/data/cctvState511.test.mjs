@@ -227,8 +227,9 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
     '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=150000\nchunklist.m3u8\n';
   const media = {
     [live]:
-      '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4.0,\nmedia_7.ts\n',
-    [fmp4]: '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:4.0,\nseg_7.mp4\n',
+      '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4.0,\nmedia_7.ts\n#EXTINF:4.0,\nmedia_8.ts\n',
+    [fmp4]:
+      '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:4.0,\nseg_7.mp4\n#EXTINF:4.0,\nseg_8.mp4\n',
     [encrypted]:
       '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXTINF:4.0,\nmedia_7.ts\n',
   };
@@ -240,25 +241,31 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
       (stream) => stream.replace('playlist.m3u8', 'chunklist.m3u8') === url,
     );
     if (owner) return new Response(media[owner]);
+    if (/\/(media_[78]\.ts|init\.mp4|seg_[78]\.mp4)$/.test(url))
+      return new Response('test-video-bytes');
     if (url === gone) return new Response('', { status: 404 });
     throw new TypeError('fetch failed');
   };
   const urls = [live, fmp4, gone, encrypted, refused];
+  const options = {
+    fetchImpl,
+    decode: async (bytes) => bytes.includes(Buffer.from('test-video-bytes')),
+  };
 
   assert.deepEqual(
-    [...(await knownDeadStreams(urls, { fetchImpl }))],
+    [...(await knownDeadStreams(urls, options))],
     [],
     'unknown links count as live until checked',
   );
   await settleStreamHealthChecks();
   assert.deepEqual(
-    [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
+    [...(await knownDeadStreams(urls, options))].sort(),
     [gone, encrypted].sort(),
     'a 404 is dead, an encrypted stream the proxy cannot serve is not live, fMP4 is live',
   );
   await settleStreamHealthChecks();
   assert.deepEqual(
-    [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
+    [...(await knownDeadStreams(urls, options))].sort(),
     [gone, encrypted, refused].sort(),
     'a host that stays unreachable is dead on the second strike',
   );
@@ -277,7 +284,7 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
   _resetStreamHealthForTest();
   probed.length = 0;
   assert.deepEqual(
-    [...(await knownDeadStreams(urls, { fetchImpl }))].sort(),
+    [...(await knownDeadStreams(urls, options))].sort(),
     [gone, encrypted, refused].sort(),
   );
   assert.deepEqual(probed, []);
@@ -292,10 +299,10 @@ test('stream health marks 404s dead, unreachable hosts dead after two strikes, a
   );
   _resetStreamHealthForTest();
   probed.length = 0;
-  await knownDeadStreams([fmp4], { fetchImpl });
+  await knownDeadStreams([fmp4], options);
   await settleStreamHealthChecks();
   assert.ok(probed.includes(fmp4));
-  assert.deepEqual([...(await knownDeadStreams([fmp4], { fetchImpl }))], []);
+  assert.deepEqual([...(await knownDeadStreams([fmp4], options))], []);
 });
 
 test('a dead stream falls back to its still image, and a camera with no still is dropped', async (t) => {
@@ -360,14 +367,12 @@ test('a dead stream falls back to its still image, and a camera with no still is
   const full = await loadCastleRock511Sources('us-ia', { fullCatalog: true });
   assert.deepEqual(full.map((camera) => camera.id).sort(), [
     'us-ia-1',
+    'us-ia-2',
     'us-ia-3',
   ]);
-  assert.equal(
-    full.find((camera) => camera.id === 'us-ia-1').feedType,
-    'image',
-  );
+  assert.equal(full.find((camera) => camera.id === 'us-ia-1').feedType, 'hls');
   assert.deepEqual(
-    (await createLiveCameraFilter()(full)).map((camera) => camera.id),
-    ['us-ia-3'],
+    (await createLiveCameraFilter()(full)).map((camera) => camera.id).sort(),
+    ['us-ia-1', 'us-ia-2', 'us-ia-3'],
   );
 });

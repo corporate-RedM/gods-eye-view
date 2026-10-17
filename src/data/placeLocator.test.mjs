@@ -136,3 +136,39 @@ test('lookups wait for the packs and refuse bad coordinates', async () => {
   assert.deepEqual(loads.sort(), ['countries', 'marine', 'places', 'states']);
   assert.equal(locator.locate(Number.NaN, 0), null);
 });
+
+test('a city names its country code', () => {
+  assert.equal(locator.locate(30.2672, -97.7431).city.iso2, 'US');
+});
+
+test('on request, a harbour or bridge camera past the coastline takes its shore', () => {
+  // The Statue of Liberty and the Chesapeake Bay Bridge are in the water on
+  // the simplified map: no country unless asked to snap to land.
+  assert.equal(locator.locate(40.6892, -74.0445).country, null);
+  const liberty = locator.locate(40.6892, -74.0445, { snapToLand: true });
+  assert.equal(liberty.country.name, 'United States');
+  assert.equal(liberty.region.name, 'New York');
+  const bayBridge = locator.locate(38.99, -76.39, { snapToLand: true });
+  assert.equal(bayBridge.region.name, 'Maryland');
+  // Open ocean far from any city stays open ocean.
+  assert.equal(locator.locate(30, -40, { snapToLand: true }).country, null);
+});
+
+test('on request, a coastal sliver outside every state finds its state', () => {
+  // Fernandina Beach: inside the US outline, outside every state outline.
+  assert.equal(locator.locate(30.6699, -81.437).region, null);
+  assert.equal(
+    locator.locate(30.6699, -81.437, { snapToLand: true }).region.name,
+    'Florida',
+  );
+});
+
+test('country and state names are told apart from towns', () => {
+  assert.equal(locator.isAreaName('Florida', 'US'), true);
+  assert.equal(locator.isAreaName('Taiwan'), true);
+  assert.equal(locator.isAreaName('Québec', 'CA'), true);
+  assert.equal(locator.isAreaName('Queens', 'US'), false);
+  // Another country's province does not hide a local town of that name.
+  assert.equal(locator.isAreaName('San Juan', 'AR'), true);
+  assert.equal(locator.isAreaName('San Juan', 'TT'), false);
+});

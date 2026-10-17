@@ -28,6 +28,9 @@ export function createLifecycle({
     parts.cards.teardownAmbientCards();
     parts.projection.clearProjectionOverlay();
     layerState._records = [];
+    layerState._publicCameras = [];
+    layerState._publicCameraIndex = new Map();
+    layerState._publicActiveId = null;
     layerState._recordById = new Map();
     layerState._healthById = new Map();
     layerState._count = 0;
@@ -235,6 +238,15 @@ export function createLifecycle({
           };
           layerState._records.push(record);
           layerState._recordById.set(camera.id, record);
+          if (parts.presentation.getPublicCameraState) {
+            layerState._publicCameraIndex.set(
+              camera.id,
+              layerState._publicCameras.length,
+            );
+            layerState._publicCameras.push(
+              parts.presentation.getPublicCameraState(record),
+            );
+          }
           if ((i + 1) % 128 === 0 || i + 1 === catalog.length) {
             layerState._count = layerState._records.length;
             reportProgress('registering', layerState._count, catalog.length);

@@ -3,6 +3,8 @@
  */
 export function createLiveCameraFilter({
   getDeadStreams = async () => new Set(),
+  retainUnavailable = false,
+  checkStreams = async () => {},
 } = {}) {
   let dead = new Set();
   let deadFeeds = new Set();
@@ -10,8 +12,9 @@ export function createLiveCameraFilter({
     (['hls', 'mjpeg', 'mp4', 'webm'].includes(camera.feedType) ||
       (camera.feedType === 'iframe' && !!camera.embedUrl)) &&
     !isSnapshotEndpoint(camera) &&
-    !dead.has(camera.feedType === 'iframe' ? camera.embedUrl : camera.url) &&
-    !deadFeeds.has(cameraFeedKey(camera));
+    (retainUnavailable ||
+      (!dead.has(camera.feedType === 'iframe' ? camera.embedUrl : camera.url) &&
+        !deadFeeds.has(cameraFeedKey(camera))));
   const filter = async (sources) => {
     dead = await getDeadStreams();
     deadFeeds = new Set(
@@ -22,7 +25,9 @@ export function createLiveCameraFilter({
         ])
         .filter(Boolean),
     );
-    return sources.filter(include);
+    const retained = sources.filter(include);
+    await checkStreams(retained);
+    return retained;
   };
   filter.include = include;
   filter.liveOnly = true;

@@ -281,6 +281,14 @@ const CITY_CELL_DEG = 2;
 export const NEAREST_CITY_MAX_KM = 300;
 
 /**
+ * A point outside every country (a bridge or pier past the simplified
+ * coastline) takes the country of a city this close, when asked to.
+ */
+export const SNAP_TO_LAND_KM = 80;
+/** How far past its city a water point's walk to land may go. */
+const LAND_PAST_CITY_KM = 15;
+
+/**
  * How far a city's name reaches from its centre, growing with population:
  * a camera on Austin's outskirts is in Austin, one 60 km out is near it.
  * Same curve as the CCTV camera labels (server/providers/cctv/places.js).
@@ -362,7 +370,7 @@ function nearbyCities(cells, lat, lon, radiusKm) {
  * is named as "near". Places in the point's own country are preferred, so a
  * border town is not named after the bigger city across the border.
  *
- * @returns {{name: string, distanceKm: number, within: boolean, population: number, capital: boolean}|null}
+ * @returns {{name: string, distanceKm: number, within: boolean, population: number, capital: boolean, iso2: ?string, lat: number, lon: number}|null}
  */
 function findCity(cells, lat, lon, iso2) {
   const candidates = nearbyCities(cells, lat, lon, NEAREST_CITY_MAX_KM);
@@ -399,7 +407,21 @@ function findCity(cells, lat, lon, iso2) {
     within,
     population: best.city.population,
     capital: best.city.kind === 2,
+    iso2: best.city.iso2,
+    lat: best.city.lat,
+    lon: best.city.lon,
   };
+}
+
+/** Case-, accent- and apostrophe-blind form of a place name, for comparing labels. */
+function placeKey(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/['’ʼ]/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 // ── packs ───────────────────────────────────────────────────────────────
@@ -485,7 +507,7 @@ function indexMarine(pack) {
  * @property {?{name: string, type: string}} part - A constituent country of the
  *   United Kingdom (England, Scotland, Wales, Northern Ireland), else null.
  * @property {?{name: string, type: string}} region - State, province, county…
- * @property {?{name: string, distanceKm: number, within: boolean, population: number, capital: boolean}} city
+ * @property {?{name: string, distanceKm: number, within: boolean, population: number, capital: boolean, iso2: ?string, lat: number, lon: number}} city
  */
 
 /**
@@ -500,6 +522,12 @@ export function createPlaceLocator({
   let states = null;
   let marine = null;
   let cities = null;
+  /**
+   * Country and state names → where they apply: '*' for a country name, the
+   * state's country code otherwise. Built on the first `isAreaName` call.
+   * @type {Map<string, Set<string>>|null}
+   */
+  let areaNames = null;
 
   const loadAll = createRetryableLoader(async () => {
     const [countryPack, statePack, marinePack, placePack] = await Promise.all([
@@ -550,6 +578,45 @@ export function createPlaceLocator({
     return nearestKm <= 150 ? nearest : null;
   }
 
+  /**
+   * A water point's state (and UK nation): the first one met walking from the
+   * point toward its city, and a little past it, since a coastal city's own
+   * point can sit off the simplified shore too. A bay bridge reads as the
+   * shore it joins.
+   */
+  function landToward(country, lat, lon, city) {
+    const list =
+      states.get(country.sourceName) || states.get(country.country) || [];
+    const nations =
+      country.iso2 === 'GB'
+        ? countries.filter((entry) => entry.type === 'Constituent country')
+        : [];
+    if (city.distanceKm < 0.05) return { region: null, part: null };
+    const reach = (city.distanceKm + LAND_PAST_CITY_KM) / city.distanceKm;
+    const steps = Math.min(
+      240,
+      Math.ceil((city.distanceKm + LAND_PAST_CITY_KM) / 0.5),
+    );
+    for (let i = 1; i <= steps; i++) {
+      const y = lat + ((city.lat - lat) * reach * i) / steps;
+      const x = lon + ((city.lon - lon) * reach * i) / steps;
+      const region = list.find((entry) => {
+        stateGeometry(entry);
+        return inBox(entry.box, y, x) && partsContain(entry.parts, y, x);
+      });
+      if (region)
+        return {
+          region,
+          part:
+            nations.find(
+              (entry) =>
+                inBox(entry.box, y, x) && partsContain(entry.parts, y, x),
+            ) || null,
+        };
+    }
+    return { region: null, part: null };
+  }
+
   function findWater(lat, lon) {
     let ocean = null;
     let water = null;
@@ -574,17 +641,38 @@ export function createPlaceLocator({
      * Describe a point. Returns null until `ready()` has resolved.
      * @param {number} lat
      * @param {number} lon
+     * @param {{snapToLand?: boolean}} [options] - With `snapToLand`, a point in
+     *   the water within SNAP_TO_LAND_KM of a city takes that city's country
+     *   and the nearest state, as a harbour or bridge camera should.
      * @returns {?PlaceFix}
      */
-    locate(lat, lon) {
+    locate(lat, lon, { snapToLand = false } = {}) {
       if (!countries || !Number.isFinite(lat) || !Number.isFinite(lon))
         return null;
       const y = Math.max(-90, Math.min(90, lat));
       const x = wrapLon(lon);
-      const { country, part } = findCountry(y, x);
+      let { country, part } = findCountry(y, x);
       const water = country ? { ocean: null, water: null } : findWater(y, x);
-      const region = country ? findRegion(country, y, x) : null;
       const city = findCity(cities, y, x, country?.iso2 || null);
+      let region = country ? findRegion(country, y, x) : null;
+      if (
+        !country &&
+        snapToLand &&
+        city?.iso2 &&
+        (city.within || city.distanceKm <= SNAP_TO_LAND_KM)
+      ) {
+        country =
+          countries.find(
+            (entry) =>
+              entry.iso2 === city.iso2 && entry.type !== 'Constituent country',
+          ) || null;
+        if (country) ({ region, part } = landToward(country, y, x, city));
+      } else if (snapToLand && country && !region && city) {
+        // A coastal sliver outside every state: the same walk finds its shore.
+        const shore = landToward(country, y, x, city);
+        region = shore.region;
+        part ??= shore.part;
+      }
       return {
         lat: y,
         lon: x,
@@ -598,6 +686,34 @@ export function createPlaceLocator({
         region: region ? { name: region.name, type: region.type } : null,
         city,
       };
+    },
+    /**
+     * Whether a label names a whole country, or a state, province or other
+     * first-level region of the country `iso2` ("Florida" in the US,
+     * "Taiwan") rather than a town. Any country's states count when `iso2`
+     * is not given. False until `ready()` has resolved.
+     * @param {string} name
+     * @param {?string} [iso2]
+     * @returns {boolean}
+     */
+    isAreaName(name, iso2 = null) {
+      if (!countries || !states) return false;
+      if (!areaNames) {
+        areaNames = new Map();
+        const add = (value, where) => {
+          const key = placeKey(value);
+          if (!key) return;
+          if (!areaNames.has(key)) areaNames.set(key, new Set());
+          areaNames.get(key).add(where);
+        };
+        for (const entry of countries)
+          for (const value of [entry.name, entry.sourceName, entry.country])
+            add(value, '*');
+        for (const entry of [...states.values()].flat())
+          add(entry.name, entry.iso2 || '?');
+      }
+      const where = areaNames.get(placeKey(name));
+      return Boolean(where && (!iso2 || where.has('*') || where.has(iso2)));
     },
   };
 }

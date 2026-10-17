@@ -32,7 +32,23 @@ export function createHealth({ state: layerState, services, parts, source }) {
           updatedAt: parts.model.safeNumber(row.updatedAt, now),
         });
       }
+      const previous = layerState._healthById;
       layerState._healthById = next;
+      // The cached public list must still reflect health changes for inactive
+      // cameras, including a status disappearing from the health response.
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (JSON.stringify(previous.get(id)) === JSON.stringify(next.get(id)))
+          continue;
+        const index = layerState._publicCameraIndex?.get(id);
+        const record = layerState._recordById?.get(id);
+        if (
+          index !== undefined &&
+          record &&
+          parts.presentation?.getPublicCameraState
+        )
+          layerState._publicCameras[index] =
+            parts.presentation.getPublicCameraState(record);
+      }
     } catch {
       // keep previous health map
     }

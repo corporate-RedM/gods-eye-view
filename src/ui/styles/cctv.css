@@ -191,10 +191,10 @@
 .cctv-catalogue-picker-row {
   position: absolute;
   box-sizing: border-box;
-  height: 68px;
+  height: 76px;
   left: 0;
   right: 0;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid #ffffff16;
   cursor: pointer;
 }
@@ -202,21 +202,61 @@
 .cctv-catalogue-picker-row[aria-selected='true'] {
   background: #294556;
 }
+/* Name with its playback status, then where the camera is, then who runs it. */
+.cctv-catalogue-picker-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 .cctv-catalogue-picker-row strong {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
   font-size: 14px;
-  line-height: 17px;
+  line-height: 19px;
 }
 .cctv-catalogue-picker-row span {
   display: block;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  color: #b8cfda;
+}
+.cctv-catalogue-picker-place {
+  margin-top: 3px;
+  color: #eaf5fa;
+  font-size: 13px;
+  line-height: 18px;
+}
+.cctv-catalogue-picker-meta {
+  margin-top: 2px;
+  color: #9fb8c4;
   font-size: 12px;
+  line-height: 16px;
+}
+.cctv-catalogue-picker-status {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #c9d8e0;
+  background: #ffffff14;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 17px;
+}
+.cctv-catalogue-picker-status[data-status='available'] {
+  color: #9be8b0;
+  background: #1f4a2c;
+}
+.cctv-catalogue-picker-status[data-status='unavailable'] {
+  color: #ffb8a8;
+  background: #5a2620;
+}
+.cctv-catalogue-picker-status[data-status='unverified'] {
+  color: #ffd98a;
+  background: #4d3c16;
 }
 
 #cctv-camera-search {

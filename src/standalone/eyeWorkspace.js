@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { loadToolCatalog } from './toolCatalog.js';
+import { createCctvSource } from '../layers/cctv/source.js';
 import {
   GRAPHICS,
   applyGraphics,
@@ -210,20 +211,16 @@ export function createEyeWorkspace({
     }
   }
   async function catalogue() {
-    let snapshot;
-    do {
-      snapshot = await json('/api/cctv/sources');
-      cameras = snapshot.sources || [];
-      if (!snapshot.coverage?.loading || snapshot.coverage.snapshotReady) break;
-      const completed = snapshot.coverage.packs.filter(
-        (p) => !['pending', 'loading'].includes(p.state),
-      ).length;
-      report(
-        `Loading full camera inventories: ${completed}/${snapshot.coverage.packs.length} providers · ${cameras.length.toLocaleString()} cameras found`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      if (signal.aborted) return cameras;
-    } while (true);
+    const snapshot = await createCctvSource().getCatalog({
+      signal,
+      onProgress: ({ discovered, downloaded }) =>
+        report(
+          downloaded == null
+            ? `${discovered.toLocaleString()} cameras found`
+            : `Loading cameras: ${downloaded.toLocaleString()} / ${discovered.toLocaleString()}`,
+        ),
+    });
+    cameras = snapshot.sources || [];
     if (snapshot.coverage) {
       const unavailable = snapshot.coverage.packs.filter((p) =>
         ['unavailable', 'stale', 'partial'].includes(p.state),

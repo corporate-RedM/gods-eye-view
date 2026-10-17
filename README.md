@@ -25,8 +25,8 @@ The standalone app uses full-inventory mode:
 
 The standalone catalogue is video-only: provider-listed HLS, MJPEG, MP4/WebM
 and embedded players are retained. Still-image records and website-only operator
-links and streams already recorded as dead are filtered out on the server.
-Unverified feeds remain, including periodically refreshed clips and embedded
+links are filtered out on the server. Following BK's latest instruction to remove
+no cameras, unavailable and unverified video feeds remain, including periodically refreshed clips and embedded
 players. Counts do not prove working playback. Shared video endpoints are
 deduplicated across every pack, even when coordinates differ, with alias IDs
 retained. Camera-selecting URL parameters remain distinct; known DelDOT legacy
@@ -34,14 +34,22 @@ URLs, South Carolina playlist variants, YouTube presentation options and DriveTe
 for comparison. Playback URLs are unchanged. Different views at the same location
 remain separate. Direct still-image endpoints mislabeled as video are excluded;
 multipart MJPEG is retained.
-Caltrans, DelDOT and state-511 loaders retain their existing dead-stream checks.
-The merged catalogue also reads saved dead verdicts so aliases from other packs
-cannot reintroduce those URLs. This adds no new probes or verification requirement.
+The existing `streamHealth.js` checks media bytes for HLS (including public token
+resolution), MJPEG and MP4/WebM. Embedded pages remain unverified unless playback
+is confirmed. Verdicts never remove video candidates from the full catalogue.
+The legacy bounded library path retains its existing dead-stream fallback.
+Checks use eight workers, at most two probes/requests per host, respect Retry-After,
+and periodically recheck failures. `ffmpeg` must decode the expected video format;
+a still image mislabeled as MP4 or HLS cannot pass. A check is evidence of playback
+at that time, not a guarantee of future availability or visible motion.
 
 Camera inventories live only in server memory, with the original 15-minute TTL.
 There is no catalogue read/write on disk; every server restart collects again.
 The browser polls `/api/cctv/sources?status=1` every two seconds during collection
-(counts and status only), then downloads `/api/cctv/sources` once. Failed/partial
+(counts and status only), then downloads `/api/cctv/sources` in sequential pages
+of at most 256 cameras. Follow `page.next` using `snapshot` and `offset` until
+`next` is null. Provider coverage metadata accompanies the first page only.
+Paging snapshots remain in memory. Failed/partial
 provider refreshes can retain records only within the same server process.
 MJPEG plays continuously in the camera panel's IMG element; collapsing the panel,
 switching cameras, hiding the tab or disposing the controls releases its stream.
@@ -60,8 +68,8 @@ additions do not imply that every WorldCam camera or every provider-listed feed
 has been verified.
 
 To verify the running instance, inspect
-[`/api/cctv/sources`](http://localhost:4173/api/cctv/sources): `sources.length`
-is the current count, `coverage.mode` should be `"full"`, `trimmedPacks` should
+[`/api/cctv/sources`](http://localhost:4173/api/cctv/sources): `page.total`
+is the complete count (`sources.length` is just this page), `coverage.mode` should be `"full"`, `trimmedPacks` should
 be empty, and `coverage.packs` reports provider state. `coverage.loading: true`
 can indicate a background refresh while an in-memory catalogue is available.
 Use these fields rather than an old `.env` value or a test-suite count as evidence.
@@ -79,9 +87,10 @@ registered in the browser against the server's filtered video catalogue total.
 It finishes at the actual `N / N` and stays visible while
 CCTV is enabled. Cold server collection shows records found with no invented
 final total. `catalogueLoading` in the layer UI state carries this progress;
-registration yields every 2,048 records without publishing partial camera lists.
+registration yields every 128 records without publishing partial camera lists.
 Terrain positioning runs quietly in the background with no user-facing counter.
 The catalogue counter counts camera records; camera feeds are opened on demand.
+See [the stability report](docs/CAMERA_STABILITY_REPORT.md) for verification and limitations.
 **Nearest** selects another matching feed near the viewed area's centre;
 **Focus** returns to the selected feed. Preserve these behaviors when migrating.
 

@@ -232,6 +232,7 @@ const PLACES = new Map([
   ['埔鹽鄉', 'Puyan Township'],
   ['溪湖鎮', 'Xihu Township'],
   ['斗南鎮', 'Dounan Township'],
+  ['斗六市', 'Douliu'],
   ['公館鄉', 'Gongguan Township'],
   ['臺中七期', 'Taichung Seventh Redevelopment Zone'],
   ['大林鎮', 'Dalin Township'],

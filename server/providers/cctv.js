@@ -1,4 +1,10 @@
 import { createCctvCatalog } from './cctv/catalog.js';
+import { createCatalogPages } from './cctv/catalogPages.js';
+import {
+  streamVerdict,
+  streamVerificationSummary,
+  stopStreamHealthChecks,
+} from './cctv/streamHealth.js';
 import {
   normalizeFeedType,
   isVideoFeedType,
@@ -42,6 +48,7 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
   const getCctvSources = getSources ?? createCctvCatalog({ sourceRoot });
   let indexedSources;
   let sourceById = new Map();
+  const catalogPage = createCatalogPages();
   /** @type {Map<string,{id:string,status:string,sourceKind:string,label:string,message:string,updatedAt:number}>} */
   const health = new Map();
   /** Cap on health map entries to prevent unbounded growth. Sized to the
@@ -156,6 +163,7 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
 
   const installMiddleware = (server) => {
     server.httpServer?.on('close', () => {
+      stopStreamHealthChecks();
       puller.shutdown();
       watch.dispose();
     });
@@ -185,6 +193,7 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
             res.end(
               JSON.stringify({
                 count: sources.length,
+                verification: streamVerificationSummary(sources),
                 coverage: coverage && {
                   mode: coverage.mode,
                   liveOnly: coverage.liveOnly,
@@ -197,10 +206,25 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
             );
             return;
           }
+          const slice = catalogPage(sources, url.searchParams);
+          if (slice.expired) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error: 'Catalogue snapshot expired; restart paging.',
+              }),
+            );
+            return;
+          }
           const body = {
-            ...(coverage ? { coverage } : {}),
-            trimmedPacks: getCctvSources.trimmedPacks?.() ?? [],
-            sources: sources.map((source) => ({
+            page: slice.page,
+            ...(slice.page.offset === 0
+              ? {
+                  ...(coverage ? { coverage } : {}),
+                  trimmedPacks: getCctvSources.trimmedPacks?.() ?? [],
+                }
+              : {}),
+            sources: slice.sources.map((source) => ({
               id: source.id,
               pack: source.pack,
               name: source.name,
@@ -217,6 +241,7 @@ export function cctvProxy({ sourceRoot = process.cwd(), getSources } = {}) {
               mountHeightM: source.mountHeightM,
               groundElevationM: source.groundElevationM,
               feedType: normalizeFeedType(source.feedType),
+              playback: streamVerdict(source),
               externalUrl: source.externalUrl || '',
               embedUrl: source.embedUrl || '',
               aliases: source.aliases || [],

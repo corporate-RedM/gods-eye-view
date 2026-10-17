@@ -8,6 +8,25 @@ import {
   PROJECTION_CANVAS_HEIGHT,
 } from './policy.js';
 
+/** Hidden monitor planes must not upload a decoded video texture every frame. */
+export function syncProjectionVideoTexture(runtime, visible) {
+  const video = runtime?.video;
+  if (!video || !runtime.planeMaterial) return;
+  const ready = visible && video.videoWidth > 0 && video.videoHeight > 0;
+  const image = ready ? video : runtime.canvas;
+  const resized =
+    ready &&
+    (video.width !== video.videoWidth || video.height !== video.videoHeight);
+  if (runtime.boundVideoImage === image && !resized) return;
+  if (ready) {
+    video.width = video.videoWidth;
+    video.height = video.videoHeight;
+    runtime.planeMaterial.image = runtime.canvas;
+  }
+  runtime.planeMaterial.image = image;
+  runtime.boundVideoImage = image;
+}
+
 export function createProjection({
   state: layerState,
   services,
@@ -103,6 +122,7 @@ export function createProjection({
   function setPlaneVisible(runtime, visible) {
     if (!runtime) return;
     if (runtime.planeEntity) runtime.planeEntity.show = !!visible;
+    syncProjectionVideoTexture(runtime, !!visible);
     if (visible && runtime.overlayEntry && runtime.cameraId) {
       if (layerState._projectionOverlayOwnerId !== runtime.cameraId) {
         layerState._cctvOverlayHost.setEntries(
@@ -224,11 +244,7 @@ export function createProjection({
       // and rebind on any resolution change (camera switch, adaptive source).
       const bindVideoTexture = () => {
         if (runtime.video !== video || !runtime.planeMaterial) return;
-        if (!(video.videoWidth > 0 && video.videoHeight > 0)) return;
-        video.width = video.videoWidth;
-        video.height = video.videoHeight;
-        runtime.planeMaterial.image = runtime.canvas;
-        runtime.planeMaterial.image = video;
+        syncProjectionVideoTexture(runtime, !!runtime.planeEntity?.show);
       };
       video.addEventListener('loadedmetadata', bindVideoTexture);
       video.addEventListener('resize', bindVideoTexture);

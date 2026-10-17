@@ -69,7 +69,38 @@ export function createCctvSource({
           if (signal?.aborted) abort();
         });
       } while (true);
-      return read('/api/cctv/sources', 'sources', options);
+      const sources = [];
+      let path = '/api/cctv/sources';
+      let result;
+      let metadata;
+      do {
+        result = await read(path, 'sources', options);
+        metadata ||= {
+          coverage: result.coverage,
+          trimmedPacks: result.trimmedPacks,
+        };
+        sources.push(...result.sources);
+        if (result.page) {
+          options.onProgress?.({
+            discovered: result.page.total,
+            collecting: false,
+            downloaded: sources.length,
+          });
+          // A consumer may finish processing a batch before requesting more.
+          await options.onBatch?.(result.sources, result.page);
+          if (result.page.next !== null) {
+            if (
+              !Number.isSafeInteger(result.page.next) ||
+              result.page.next <= result.page.offset
+            )
+              throw new Error('Malformed camera page cursor');
+            path = `/api/cctv/sources?snapshot=${encodeURIComponent(result.page.snapshot)}&offset=${result.page.next}`;
+            await new Promise((resolve) => setTimeout(resolve, 16));
+          }
+        }
+        options.signal?.throwIfAborted();
+      } while (result.page && result.page.next !== null);
+      return { ...result, ...metadata, sources };
     },
     getHealth(options) {
       return read('/api/cctv/health', 'cameras', options);

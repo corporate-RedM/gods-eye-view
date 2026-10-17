@@ -330,11 +330,13 @@ export async function loadCaltransSourcesFromOpenData({
   }
 
   // Preserve existing dead-stream verdicts; unverified URLs remain video.
-  const deadStreams = await knownDeadStreams(
-    cameras
-      .filter((camera) => camera.feedType === 'hls')
-      .map((camera) => camera.url),
-  );
+  const deadStreams = fullCatalog
+    ? new Set()
+    : await knownDeadStreams(
+        cameras
+          .filter((camera) => camera.feedType === 'hls')
+          .map((camera) => camera.url),
+      );
   for (const camera of cameras) {
     if (camera.feedType !== 'hls' || !deadStreams.has(camera.url)) continue;
     camera.feedType = 'image';
@@ -1784,9 +1786,9 @@ export async function loadDelDOTSourcesFromOpenData({
     }
 
     // Preserve existing dead-stream verdicts; unverified URLs remain video.
-    const deadStreams = await knownDeadStreams(
-      cameras.map((camera) => camera.url),
-    );
+    const deadStreams = fullCatalog
+      ? new Set()
+      : await knownDeadStreams(cameras.map((camera) => camera.url));
     const unique = Array.from(
       new Map(
         cameras

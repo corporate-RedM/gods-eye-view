@@ -1,34 +1,97 @@
-const ROW_HEIGHT = 68;
+import { placeLocator } from '../data/placeLocator.js';
+import { cameraAddress } from './whereAmIModel.js';
 
-export function cameraPickerLabel(camera) {
+const ROW_HEIGHT = 76;
+
+/** Playback check results, as each row says them. */
+const AVAILABILITY = Object.freeze({
+  available: 'Playback checked',
+  unavailable: 'Temporarily unavailable',
+  unverified: 'Playback unverified',
+  unchecked: 'Not checked yet',
+});
+
+/** The row's playback status; a stream that failed this session is down. */
+export function cameraPickerStatus(camera) {
+  const status = camera.liveFailed
+    ? 'unavailable'
+    : AVAILABILITY[camera.playback?.status]
+      ? camera.playback.status
+      : 'unchecked';
+  return { status, label: AVAILABILITY[status] };
+}
+
+/**
+ * One search row: the camera's name, where it is ("Queens, New York, United
+ * States"), who runs it and its feed format, and its playback status.
+ * @param {object} camera - Public camera state.
+ * @param {?{line: string}} [address] - From `cameraAddress`; before the
+ *   place packs load, the provider's city stands in.
+ */
+export function cameraPickerLabel(camera, address = null) {
   let name = String(
     camera.name || camera.code || camera.id || 'Unnamed camera',
   );
   const repeated = name.split(/\s+[—–]\s+/);
   if (repeated.length > 1 && repeated.every((part) => part === repeated[0]))
     name = repeated[0];
-  const place = [camera.city, camera.provider].filter(Boolean).join(' · ');
-  const availability = camera.liveFailed
-    ? 'Temporarily unavailable'
-    : {
-        available: 'Playback checked',
-        unavailable: 'Temporarily unavailable',
-        unverified: 'Playback unverified',
-        unchecked: 'Not checked yet',
-      }[camera.playback?.status] || 'Not checked yet';
+  const place = address?.line || String(camera.city || '');
+  const meta = [
+    camera.provider,
+    String(camera.feedType || 'video').toUpperCase(),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const { status, label: availability } = cameraPickerStatus(camera);
   return {
     name,
-    details: [
-      place,
-      String(camera.feedType || 'video').toUpperCase(),
-      availability,
-    ]
-      .filter(Boolean)
-      .join(' · '),
+    place,
+    meta,
+    status,
+    availability,
+    details: [place, meta, availability].filter(Boolean).join(' · '),
   };
 }
 
-export function filterCameraPickerRows(cameras, query) {
+/**
+ * Everything a search can match: names and places in English and in the
+ * original script, provider, ID and code, and once located the town, state,
+ * nation, country, country code and continent ("Portugal", "PRT", "Europe").
+ */
+export function cameraSearchText(camera, address = null, fix = null) {
+  return [
+    camera.name,
+    camera.originalName,
+    camera.city,
+    camera.originalCity,
+    camera.provider,
+    camera.id,
+    camera.code,
+    address?.line,
+    fix?.city?.within ? fix.city.name : '',
+    fix?.region?.name,
+    fix?.part?.name,
+    fix?.country?.name,
+    fix?.country?.iso3,
+    fix?.continent,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+}
+
+/**
+ * Cameras whose search text holds every typed word.
+ * @param {object[]} cameras
+ * @param {string} query
+ * @param {(camera: object) => string} [searchText] - Lower-case text per
+ *   camera; the picker passes its located text.
+ */
+export function filterCameraPickerRows(
+  cameras,
+  query,
+  searchText = (camera) => cameraSearchText(camera),
+) {
   const words = String(query || '')
     .trim()
     .toLocaleLowerCase()
@@ -36,8 +99,7 @@ export function filterCameraPickerRows(cameras, query) {
     .filter(Boolean);
   if (!words.length) return cameras;
   return cameras.filter((camera) => {
-    const text =
-      `${camera.name} ${camera.originalName || ''} ${camera.city} ${camera.originalCity || ''} ${camera.provider} ${camera.id} ${camera.code || ''}`.toLocaleLowerCase();
+    const text = searchText(camera);
     return words.every((word) => text.includes(word));
   });
 }
@@ -73,6 +135,59 @@ export function createCameraCataloguePicker(controls) {
     query = '',
     open = false;
   let searchTimer;
+  // Each camera's address and search text, worked out once (~25 µs a camera)
+  // in short slices after the catalogue arrives, so typing a country or state
+  // finds every camera there within a few seconds of loading.
+  const places = new Map();
+  let indexAt = 0;
+  let indexJob = null;
+  const placeFor = (camera, compute = true) => {
+    const key = `${camera.lat},${camera.lon},${camera.city},${camera.name}`;
+    const known = places.get(camera.id);
+    if (known?.key === key) return known;
+    if (!compute || !placeLocator.isReady()) return null;
+    const fix = placeLocator.locate(camera.lat, camera.lon, {
+      snapToLand: true,
+    });
+    const address = cameraAddress(camera, fix, {
+      isAreaName: placeLocator.isAreaName,
+    });
+    const entry = {
+      key,
+      address,
+      text: cameraSearchText(camera, address, fix),
+    };
+    places.set(camera.id, entry);
+    return entry;
+  };
+  const searchTextFor = (camera) =>
+    placeFor(camera, false)?.text ?? cameraSearchText(camera);
+  // Timer slices give a known finish (about 6 s for 47,000 cameras, measured
+  // on the running app); idle callbacks promise no time while the globe
+  // renders every frame.
+  const nextSlice = (step) => setTimeout(step, 16);
+  const cancelIndex = () => {
+    clearTimeout(indexJob);
+    indexJob = null;
+  };
+  const indexPlaces = () => {
+    if (indexJob || controls.destroyed) return;
+    if (!placeLocator.isReady()) {
+      // Until the place packs load, rows show the provider's city.
+      placeLocator.ready().then(indexPlaces, () => {});
+      return;
+    }
+    const step = () => {
+      indexJob = null;
+      if (controls.destroyed) return;
+      const stopAt = performance.now() + 10;
+      while (indexAt < cameras.length && performance.now() < stopAt)
+        placeFor(cameras[indexAt++]);
+      if (indexAt < cameras.length) indexJob = nextSlice(step);
+      else if (open) refresh();
+    };
+    indexJob = nextSlice(step);
+  };
   const close = () => {
     open = false;
     popup.hidden = true;
@@ -117,7 +232,7 @@ export function createCameraCataloguePicker(controls) {
     space.replaceChildren();
     for (let i = start; i < end; i++) {
       const camera = matches[i],
-        label = cameraPickerLabel(camera);
+        label = cameraPickerLabel(camera, placeFor(camera)?.address);
       const row = document.createElement('div');
       row.className = 'cctv-catalogue-picker-row';
       row.style.top = `${i * ROW_HEIGHT}px`;
@@ -127,12 +242,23 @@ export function createCameraCataloguePicker(controls) {
       row.setAttribute('aria-selected', String(i === selected));
       row.setAttribute('aria-posinset', String(i + 1));
       row.setAttribute('aria-setsize', String(matches.length));
-      row.title = `${label.name}\n${label.details}\n${camera.id}`;
+      row.title = `${label.name}\n${label.place}\n${label.meta} · ${label.availability}\n${camera.id}`;
+      const top = document.createElement('div');
+      top.className = 'cctv-catalogue-picker-top';
       const name = document.createElement('strong');
       name.textContent = label.name;
-      const details = document.createElement('span');
-      details.textContent = label.details;
-      row.append(name, details);
+      const status = document.createElement('em');
+      status.className = 'cctv-catalogue-picker-status';
+      status.dataset.status = label.status;
+      status.textContent = label.availability;
+      top.append(name, status);
+      const where = document.createElement('span');
+      where.className = 'cctv-catalogue-picker-place';
+      where.textContent = label.place;
+      const meta = document.createElement('span');
+      meta.className = 'cctv-catalogue-picker-meta';
+      meta.textContent = label.meta;
+      row.append(top, where, meta);
       row.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         choose(camera);
@@ -148,9 +274,19 @@ export function createCameraCataloguePicker(controls) {
   };
   const filter = () => {
     query = input.value.trim();
-    matches = filterCameraPickerRows(cameras, query);
+    matches = filterCameraPickerRows(cameras, query, searchTextFor);
     selected = -1;
     viewport.scrollTop = 0;
+    render();
+  };
+  /** Match the same query again, keeping the highlighted camera highlighted. */
+  const refresh = () => {
+    const selectedId = matches[selected]?.id;
+    query = input.value.trim();
+    matches = filterCameraPickerRows(cameras, query, searchTextFor);
+    selected = selectedId
+      ? matches.findIndex((camera) => camera.id === selectedId)
+      : -1;
     render();
   };
   const show = () => {
@@ -258,21 +394,17 @@ export function createCameraCataloguePicker(controls) {
   controls.listen(window, 'resize', place);
   return {
     setCameras(next) {
-      const selectedId = matches[selected]?.id;
       cameras = next;
-      if (open) {
-        // Stream-status notifications must not jump a user back to row one.
-        query = input.value.trim();
-        matches = filterCameraPickerRows(cameras, query);
-        selected = selectedId
-          ? matches.findIndex((camera) => camera.id === selectedId)
-          : -1;
-        render();
-      }
+      indexAt = 0;
+      indexPlaces();
+      // Stream-status notifications must not jump a user back to row one.
+      if (open) refresh();
     },
     close,
     destroy() {
       clearTimeout(searchTimer);
+      cancelIndex();
+      places.clear();
       popup.remove();
     },
   };

@@ -48,8 +48,18 @@ await client.send('Profiler.start');
 const errors = [];
 const sourceStatus = [];
 const screenshots = [];
+const responseSizes = [];
 page.on('pageerror', (error) => errors.push(error.message));
 page.on('response', async (response) => {
+  if (response.url().includes('/api/cctv/sources')) {
+    try {
+      responseSizes.push({
+        bytes: (await response.buffer()).length,
+        status: response.status(),
+        statusOnly: response.url().includes('status=1'),
+      });
+    } catch {}
+  }
   if (response.url().includes('/api/cctv/sources?status=1')) {
     try {
       sourceStatus.push(await response.json());
@@ -86,21 +96,8 @@ try {
             continue;
           markers += p.length;
           if (p.show) shown += p._billboards.filter((b) => b.show).length;
-          if (p.show)
-            for (const billboard of p._billboards) {
-              if (!billboard.show) continue;
-              const point = app.viewer.scene.cartesianToCanvasCoordinates(
-                billboard.position,
-              );
-              if (
-                point &&
-                point.x >= 0 &&
-                point.y >= 0 &&
-                point.x < app.viewer.scene.canvas.clientWidth &&
-                point.y < app.viewer.scene.canvas.clientHeight
-              )
-                inViewport++;
-            }
+          // Count actual registered/shown billboards. Projecting every marker
+          // to screen solely for this observer stalls the app being measured.
         }
       const cover = document.getElementById('loading-screen');
       const style = cover && getComputedStyle(cover);
@@ -123,10 +120,13 @@ try {
       });
     }, 250);
   });
-  await page.goto(`http://127.0.0.1:4173/?welcome=0#${params}`, {
-    waitUntil: 'domcontentloaded',
-    timeout: 120000,
-  });
+  await page.goto(
+    `${process.env.GRID_QA_BASE || 'http://127.0.0.1:4173'}/?welcome=0#${params}`,
+    {
+      waitUntil: 'domcontentloaded',
+      timeout: 120000,
+    },
+  );
   for (const fraction of [0.1, 0.4, 0.7]) {
     await page.waitForFunction(
       (fraction) => {
@@ -169,12 +169,56 @@ try {
     () => {
       const s = window.gridSamples?.at(-1);
       const picker = document.getElementById('cctv-camera-select');
-      return (
-        picker && !picker.disabled && picker.options.length === s?.stats?.count
-      );
+      return picker && !picker.disabled && picker.options.length <= 129;
     },
     { timeout: 30000 },
   );
+  await page.evaluate(() => {
+    const input = document.getElementById('cctv-camera-search');
+    input.focus();
+    input.click();
+  });
+  await page.waitForSelector('.cctv-catalogue-picker:not([hidden])');
+  const total = await page.evaluate(
+    () => window.gridSamples.at(-1).stats.count,
+  );
+  assert.equal(
+    await page.$eval('.cctv-catalogue-picker-row', (row) =>
+      Number(row.getAttribute('aria-setsize')),
+    ),
+    total,
+  );
+  await page.screenshot({ path: `${out}/catalogue-first.png` });
+  await page.keyboard.press('End');
+  const last = await page.$eval(
+    '.cctv-catalogue-picker-row[aria-selected="true"]',
+    (row) => ({
+      id: row.dataset.cameraId,
+      index: Number(row.getAttribute('aria-posinset')),
+      text: row.textContent,
+    }),
+  );
+  assert.equal(last.index, total, 'The last catalogue entry must be reachable');
+  await page.screenshot({ path: `${out}/catalogue-last.png` });
+  await page.$eval(
+    '#cctv-camera-search',
+    (input, id) => {
+      input.value = id;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+    last.id,
+  );
+  await page.waitForFunction(
+    (id) => {
+      const rows = [...document.querySelectorAll('.cctv-catalogue-picker-row')];
+      return rows.length === 1 && rows[0].dataset.cameraId === id;
+    },
+    {},
+    last.id,
+  );
+  await page.screenshot({ path: `${out}/catalogue-search.png` });
+  console.log('FULL CATALOGUE SEARCH', { total, last });
+  await page.keyboard.press('Escape');
 } finally {
   const { profile } = await client.send('Profiler.stop');
   await fs.writeFile(`${out}/cpu-profile.json`, JSON.stringify(profile));
@@ -191,6 +235,7 @@ try {
   });
   result.errors = errors;
   result.sourceStatus = sourceStatus;
+  result.responseSizes = responseSizes;
   result.screenshots = screenshots;
   await fs.writeFile(`${out}/recording.json`, JSON.stringify(result, null, 2));
   console.log(
@@ -200,7 +245,9 @@ try {
       errors,
     }),
   );
-  await browser.close();
+  await page.close();
+  if (process.env.GRID_QA_BROWSER_URL) await browser.disconnect();
+  else await browser.close();
   assert.ok(
     sourceStatus[0]?.coverage?.snapshotReady,
     'Must exercise a warm server catalogue',

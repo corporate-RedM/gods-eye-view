@@ -324,7 +324,9 @@ export async function loadCastleRock511Sources(
     ];
     // Known-dead video falls back to a still, which the full catalogue excludes.
     // An unverified stream retains its video URL.
-    const dead = await knownDeadStreams(unique.map((camera) => camera.url));
+    const dead = fullCatalog
+      ? new Set()
+      : await knownDeadStreams(unique.map((camera) => camera.url));
     const usable = [];
     for (const camera of unique) {
       if (!dead.has(camera.url)) usable.push(camera);

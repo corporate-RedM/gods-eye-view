@@ -53,6 +53,7 @@ test('multilingual camera names and locality details use English without guessin
   assert.equal(englishPlaceName('Междуреченск'), 'Mezhdurechensk');
   assert.equal(englishPlaceName('台東区'), 'Taito');
   assert.equal(englishPlaceName('頭城鎮'), 'Toucheng Township');
+  assert.equal(englishPlaceName('斗六市'), 'Douliu');
   assert.equal(englishPlaceName('บ้านเฉวง'), 'Ban Chaweng');
   assert.equal(englishPlaceName('Unknown locality'), 'Unknown locality');
 });

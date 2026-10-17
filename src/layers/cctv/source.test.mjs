@@ -31,6 +31,41 @@ const camera = {
   pitchDeg: -12,
 };
 
+test('paged catalogues keep first-page coverage and every record while yielding batches', async () => {
+  const paths = [],
+    batches = [];
+  const coverage = { liveOnly: true, mode: 'full', snapshotReady: true };
+  const source = createCctvSource({
+    fetchImpl: async (path) => {
+      paths.push(path);
+      if (path.includes('status=1'))
+        return Response.json({ count: 2, coverage });
+      if (path.includes('offset=1'))
+        return Response.json({
+          sources: [{ ...camera, id: 'last' }],
+          page: { snapshot: 'pinned', offset: 1, next: null, total: 2 },
+        });
+      return Response.json({
+        coverage,
+        trimmedPacks: [],
+        sources: [camera],
+        page: { snapshot: 'pinned', offset: 0, next: 1, total: 2 },
+      });
+    },
+  });
+  const result = await source.getCatalog({
+    onBatch: (rows) => batches.push(rows.length),
+  });
+  assert.deepEqual(
+    result.sources.map((c) => c.id),
+    [camera.id, 'last'],
+  );
+  assert.deepEqual(result.coverage, coverage);
+  assert.deepEqual(result.trimmedPacks, []);
+  assert.deepEqual(batches, [1, 1]);
+  assert.equal(paths.at(-1), '/api/cctv/sources?snapshot=pinned&offset=1');
+});
+
 test('catalogue collection publishes actual discovered counts before returning the complete snapshot', async () => {
   let calls = 0;
   const paths = [];

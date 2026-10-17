@@ -94,6 +94,7 @@ export function createPresentation({
       mountHeightM: camera.mountHeightM,
       active: isActive,
       feedType: camera.feedType,
+      playback: camera.playback,
       externalUrl: camera.externalUrl || '',
       embedUrl: camera.embedUrl || '',
       isVideo: parts.navigation.recordMatchesFeed(record, 'live'),
@@ -148,6 +149,20 @@ export function createPresentation({
   function uiState() {
     const active = parts.selection.getActiveRecord();
     const activeId = active?.camera.id || null;
+    // Registration prepares the list in batches. Update only records changed
+    // by selection, editing, playback, or health instead of cloning every row.
+    for (const id of new Set([layerState._publicActiveId, activeId])) {
+      const index = layerState._publicCameraIndex?.get(id);
+      if (index !== undefined) {
+        const record = layerState._recordById.get(id);
+        if (record)
+          layerState._publicCameras[index] = getPublicCameraState(
+            record,
+            activeId,
+          );
+      }
+    }
+    layerState._publicActiveId = activeId;
     const payload = {
       enabled: layerState._enabled,
       liveOnly: layerState._liveOnly,
@@ -187,7 +202,8 @@ export function createPresentation({
       activeCamera: active ? getPublicCameraState(active, activeId) : null,
       cameras: layerState._catalogueLoading?.active
         ? []
-        : layerState._records.map((record) =>
+        : layerState._publicCameras ||
+          layerState._records.map((record) =>
             getPublicCameraState(record, activeId),
           ),
       summary: buildSummaryText(),
